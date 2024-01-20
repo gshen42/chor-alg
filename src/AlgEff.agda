@@ -1,7 +1,7 @@
---------------------------------------------------------------------------------
--- This module defines a general framework for algebraic effects, highly inspired
--- by https://doisinkidney.com/pdfs/algebraic-free-monads.pdf.
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
+-- This module defines a general framework for algebraic effects,
+-- highly inspired by https://doisinkidney.com/pdfs/algebraic-free-monads.pdf.
+----------------------------------------------------------------------
 
 {-# OPTIONS --guardedness #-}
 
@@ -11,87 +11,118 @@ module AlgEff where
 
 open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
 open import Function using (_∘_)
+open import Relation.Binary.PropositionalEquality using (_≡_)
 
---------------------------------------------------------------------------------
+private
+  variable
+    A B : Type
+
+----------------------------------------------------------------------
 -- Signature
 
 record Sig : Type₁ where
   constructor _◁_
   field
-    Op : Type
-    Ar : Op → Type
+    Op    : Type
+    Arity : Op → Type
 
---------------------------------------------------------------------------------
+open Sig
+
+private
+  variable
+    𝔽 : Sig
+
+----------------------------------------------------------------------
 -- Algebra
+
+-- A signature 𝔽 induces a functor ⟦ 𝔽 ⟧
 
 ⟦_⟧ : Sig → Type → Type
 ⟦ Op ◁ Ar ⟧ X = Σ[ o ∈ Op ] (Ar o → X)
 
+fmap : (A → B) → ⟦ 𝔽 ⟧ A → ⟦ 𝔽 ⟧ B
+fmap f (o , k) = (o , f ∘ k)
+
+-- An 𝔽-algebra on the carrier 𝒞
+
 _-Alg[_] : Sig → Type → Type
 𝔽 -Alg[ 𝒞 ] = ⟦ 𝔽 ⟧ 𝒞 → 𝒞
 
--- `⟦ 𝔽 ⟧` is a functor
+private
+  variable
+    𝒞 𝒟 : Type
 
-fmap : ∀ {𝔽} {A B} → (A → B) → ⟦ 𝔽 ⟧ A → ⟦ 𝔽 ⟧ B
-fmap f (o , k) = (o , f ∘ k)
+----------------------------------------------------------------------
+-- Terms of an algebra (or free monads)
 
---------------------------------------------------------------------------------
--- Free algebra
+data Term (𝔽 : Sig) (A : Type) : Type where
+  var : A → Term 𝔽 A
+  op  : ⟦ 𝔽 ⟧ (Term 𝔽 A) → Term 𝔽 A
 
-data Free (𝔽 : Sig) (A : Type) : Type where
-  var : A → Free 𝔽 A
-  op  : ⟦ 𝔽 ⟧ (Free 𝔽 A) → Free 𝔽 A
+-- `Term` is a monad
 
--- `Free` is a monad
+return : A → Term 𝔽 A
+return = var
 
-return : ∀ {𝔽} {A} → A → Free 𝔽 A
-return x = var x
+_>>=_ : Term 𝔽 A → (A → Term 𝔽 B) → Term 𝔽 B
+var x      >>= f = f x
+op (o , k) >>= f = op (o , _>>= f ∘ k)
+  -- ^ why `op t >>= f = op (fmap (_>>= f) t)` doesn't pass the
+  -- termination checking?
 
-_>>=_ : ∀ {𝔽} {A B} → Free 𝔽 A → (A → Free 𝔽 B) → Free 𝔽 B
-var x      >>= ρ = ρ x
-op (o , k) >>= ρ = op (o , (_>>= ρ) ∘ k)
+-- `Term` is an algebra of any `𝔽` through `op`
 
--- `Free` is a algebra of any `𝔽`
+term-alg : 𝔽 -Alg[ Term 𝔽 A ]
+term-alg = op
 
-free-alg : ∀ {𝔽} {A} → 𝔽 -Alg[ Free 𝔽 A ]
-free-alg = op
+----------------------------------------------------------------------
+-- Terms are the initial algebra
 
--- TODO: freeness of `Free`
+-- A homomorphism between two 𝔽-algebras is a function h between the
+-- two carriers 𝒞 and 𝒟 that commutes with the operations of the
+-- signature.
 
---------------------------------------------------------------------------------
--- Effect handler
+_⇒_ : 𝔽 -Alg[ 𝒞 ] → 𝔽 -Alg[ 𝒟 ] → Type
+_⇒_ {_} {𝒞} {𝒟} c d = Σ[ h ∈ (𝒞 → 𝒟) ] h ∘ c ≡ d ∘ fmap h
 
-handle : ∀ {𝔽} {𝒞 A} → (A → 𝒞) → 𝔽 -Alg[ 𝒞 ] → Free 𝔽 A → 𝒞
-handle ρ ϕ (var x)      = ρ x
-handle ρ ϕ (op (o , k)) = ϕ (o , handle ρ ϕ ∘ k)
+-- `toAlg` is also known as the effect handler
 
---------------------------------------------------------------------------------
+interp : 𝔽 -Alg[ 𝒞 ] → (A → 𝒞) → Term 𝔽 A → 𝒞
+interp c f (var x)      = f x
+interp c f (op (o , k)) = c (o , interp c f ∘ k)
+  -- ^ why `interp c f (op t) = c (fmap (interp c f) t)` doesn't pass
+  -- the termination checking?
+
+-- TODO: prove that `Term` is the initial algebra and `handle` is the
+-- homomorphism fomr it to any algebra
+
+----------------------------------------------------------------------
 -- Coalgebra
 
-⟦_⟧′ : Sig → Type → Type
-⟦ Op ◁ Ar ⟧′ X = ∀ (o : Op) → (Ar o × X)
-
 _-Coalg[_] : Sig → Type → Type
-𝔽 -Coalg[ 𝒞 ] = 𝒞 → ⟦ 𝔽 ⟧′ 𝒞
+𝔽 -Coalg[ 𝒞 ] = 𝒞 → ⟦ 𝔽 ⟧ 𝒞
 
--- ⟦ 𝔽 ⟧′ is a functor
+----------------------------------------------------------------------
+-- Coterms of a coalgebra
 
-fmap′ : ∀ {𝔽} {A B} → (A → B) → ⟦ 𝔽 ⟧′ A → ⟦ 𝔽 ⟧′ B
-fmap′ f x o = proj₁ (x o) , f (proj₂ (x o)) -- TODO: is there a more concise way to write this?
-
---------------------------------------------------------------------------------
--- Free coalgebra
-
-record Cofree (𝔽 : Sig) (A : Type) : Type where
+record CoTerm (𝔽 : Sig) (A : Type) : Type where
   coinductive
   field
-    coop : ⟦ 𝔽 ⟧′ (Cofree 𝔽 A)
+    covar : A
+    coop  : ⟦ 𝔽 ⟧ (CoTerm 𝔽 A)
 
-open Cofree
+open CoTerm
 
--- QUESTION: Is `Cofree` a comonad?
+-- TODO: Is `CoTerm` a comonad?
 
--- `Cofree` is a coalgebra for any `𝔽`
+-- `CoTerm` is a coalgebra for any `𝔽` through `coop`
 
-cofree-coalg : ∀ {𝔽} {A} → 𝔽 -Coalg[ Cofree 𝔽 A ]
-cofree-coalg = coop
+coterm-coalg : 𝔽 -Coalg[ CoTerm 𝔽 A ]
+coterm-coalg = coop
+
+----------------------------------------------------------------------
+-- Coterms are the final coalgebra
+
+-- cohandle : ∀ {𝔽} {𝒞 A} → 𝔽 -Coalg[ 𝒞 ] → Free 𝔽 A → (𝒞 → A × 𝒞)
+-- cohandle ϕ (var x)      = λ w → x , w
+-- cohandle ϕ (op (o , k)) = λ w →  cohandle ϕ (k (proj₁ (ϕ w o))) (proj₂ (ϕ w o))
