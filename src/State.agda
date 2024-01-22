@@ -1,7 +1,3 @@
---------------------------------------------------------------------------------
---
---------------------------------------------------------------------------------
-
 {-# OPTIONS --guardedness #-}
 
 open import Agda.Primitive renaming (Set to Type)
@@ -9,40 +5,56 @@ open import Agda.Primitive renaming (Set to Type)
 module State where
 
 open import AlgEff
+open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; _+_)
 open import Data.Product using (_×_; _,_)
 open import Data.Unit using (⊤; tt)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 data Op (S : Type) : Type where
   `get : Op S
   `put : S → Op S
 
-Ar : ∀ {S} → Op S → Type
-Ar {S} `get = S
-Ar (`put _) = ⊤
+Arity : ∀ {S} → Op S → Type
+Arity {S} `get = S
+Arity (`put _) = ⊤
 
 𝕊 : Type → Sig
-𝕊 S = Op S ◁ Ar
+𝕊 S = Op S ◁ Arity
 
-get : ∀ {S} → Free (𝕊 S) S
+get : ∀ {S} → Term (𝕊 S) S
 get = op (`get , return)
 
-put : ∀ {S} → S → Free (𝕊 S) ⊤
+put : ∀ {S} → S → Term (𝕊 S) ⊤
 put s = op (`put s , return)
 
-inc : Free (𝕊 ℕ) ℕ
+inc : Term (𝕊 ℕ) ℕ
 inc = do
   x ← get
-  _ ← put (x + 1) 
+  _ ← put (x + 1)
+  x ← get
   return x
 
-state-alg : ∀ {S A} → (𝕊 S) -Alg[ (S → A × S) ]
-state-alg (`get    , k) s₁ = k s₁ s₁
-state-alg (`put s₂ , k) s₁ = k tt s₂
+open CoTerm
 
-run-inc : ℕ × ℕ
-run-inc = handle (λ x s → (x , s)) state-alg inc 42
+mem : CoTerm (𝕊 ℕ) ⊤
+covar mem = tt
+coop  mem = `get , 42 , mem′
+  where
+   mem′ : CoTerm (𝕊 ℕ) ⊤
+   covar mem′ = tt
+   coop  mem′ = `put (42 + 1) , tt , mem″
+     where
+       mem″ : CoTerm (𝕊 ℕ) ⊤
+       covar mem″ = tt
+       coop  mem″ = `get , 43 , mem
 
-state-coalg : ∀ {S} → (𝕊 S) -Coalg[ S ]
-state-coalg w `get     = w , w
-state-coalg w (`put s) = tt , s
+correct : inc ⇔ mem
+correct = step refl (step refl (step refl done))
+
+mem-bad : CoTerm (𝕊 ℕ) ⊤
+covar mem-bad = tt
+coop  mem-bad = `get , 42 , mem-bad
+
+wrong : inc ⇔ mem-bad → ⊥
+wrong (step refl (step () _))

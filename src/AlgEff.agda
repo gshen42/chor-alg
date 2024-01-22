@@ -143,6 +143,6 @@ data _⇔_ {𝔽 : Sig} {A} {B} : Term 𝔽 A → CoTerm 𝔽 B → Type₁ wher
        → return a ⇔ τ
 
   step : ∀ {o} {k} {ar} {τ τ′}
-       → op (o , k) ⇔ τ
        → coop τ ≡ (o , ar , τ′)
        → k ar ⇔ τ′
+       → op (o , k) ⇔ τ
