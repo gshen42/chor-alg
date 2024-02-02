@@ -10,6 +10,7 @@ open import Agda.Primitive renaming (Set to Type)
 module AlgEff where
 
 open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
+open import Data.Sum using (_⊎_; [_,_])
 open import Function using (_∘_)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 
@@ -31,6 +32,9 @@ open Sig
 private
   variable
     𝔽 : Sig
+
+_:+:_ : Sig → Sig → Sig
+𝔽 :+: 𝔾 = (Op 𝔽 ⊎ Op 𝔾) ◁ [ Arity 𝔽 , Arity 𝔾 ]
 
 ----------------------------------------------------------------------
 -- Algebra
