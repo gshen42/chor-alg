@@ -9,7 +9,9 @@ open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; _+_)
 open import Data.Product using (_×_; _,_)
 open import Data.Unit using (⊤; tt)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+
+----------------------------------------------------------------------
+-- Signature of statuful compuations
 
 data Op (S : Type) : Type where
   `get : Op S
@@ -19,42 +21,43 @@ Arity : ∀ {S} → Op S → Type
 Arity {S} `get = S
 Arity (`put _) = ⊤
 
-𝕊 : Type → Sig
-𝕊 S = Op S ◁ Arity
+State : Type → Sig
+State S = Op S ◁ Arity
 
-get : ∀ {S} → Term (𝕊 S) S
+----------------------------------------------------------------------
+-- Smart constructors
+
+get : ∀ {S} → Term (State S) S
 get = op (`get , return)
 
-put : ∀ {S} → S → Term (𝕊 S) ⊤
+put : ∀ {S} → S → Term (State S) ⊤
 put s = op (`put s , return)
 
-inc : Term (𝕊 ℕ) ℕ
+----------------------------------------------------------------------
+-- An example program
+
+inc : Term (State ℕ) ℕ
 inc = do
   x ← get
   _ ← put (x + 1)
-  x ← get
   return x
 
-open CoTerm
+----------------------------------------------------------------------
+-- Semantics
 
-mem : CoTerm (𝕊 ℕ) ⊤
-covar mem = tt
-coop  mem = `get , 42 , mem′
+private
+  variable
+    S A : Type
+
+st-trans : Term (State S) A → (S → A × S)
+st-trans = interp alg sub
   where
-   mem′ : CoTerm (𝕊 ℕ) ⊤
-   covar mem′ = tt
-   coop  mem′ = `put (42 + 1) , tt , mem″
-     where
-       mem″ : CoTerm (𝕊 ℕ) ⊤
-       covar mem″ = tt
-       coop  mem″ = `get , 43 , mem
+    alg : (State S) -Alg[ (S → A × S) ]
+    alg (`get   , k) = λ s → k s s
+    alg (`put s , k) = λ _ → k tt s
 
-correct : inc ⇔ mem
-correct = step refl (step refl (step refl done))
+    sub : A → (S → A × S)
+    sub a = λ s → a , s
 
-mem-bad : CoTerm (𝕊 ℕ) ⊤
-covar mem-bad = tt
-coop  mem-bad = `get , 42 , mem-bad
-
-wrong : inc ⇔ mem-bad → ⊥
-wrong (step refl (step () _))
+test : ℕ × ℕ
+test = st-trans inc 10
