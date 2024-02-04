@@ -5,27 +5,28 @@
 
 {-# OPTIONS --guardedness #-}
 
-open import Agda.Primitive renaming (Set to Type)
-
 module AlgEff where
 
 open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; [_,_])
 open import Function using (_∘_)
+open import Level using (Level; suc; _⊔_; Lift)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 
 private
   variable
-    A B : Type
+    a b c d ℓ : Level
+    A B       : Set ℓ
+    𝒞 𝒟      : Set ℓ
 
 ----------------------------------------------------------------------
 -- Signature
 
-record Sig : Type₁ where
+record Sig {a} {b} : Set (suc (a ⊔ b)) where
   constructor _◁_
   field
-    Op    : Type
-    Arity : Op → Type
+    Op    : Set a
+    Arity : Op → Set b
 
 open Sig
 
@@ -33,15 +34,17 @@ private
   variable
     𝔽 : Sig
 
-_:+:_ : Sig → Sig → Sig
-𝔽 :+: 𝔾 = (Op 𝔽 ⊎ Op 𝔾) ◁ [ Arity 𝔽 , Arity 𝔾 ]
+_:+:_ : Sig {a} {b} → Sig {c} {d} → Sig {a ⊔ c} {suc (b ⊔ d)}
+𝔽 :+: 𝔾 = (Op 𝔽 ⊎ Op 𝔾) ◁ [ Lift _ ∘ Arity 𝔽 , Lift _ ∘ Arity 𝔾 ]
+
+-- ^ I don't fully understand why the above definition works.
 
 ----------------------------------------------------------------------
 -- Algebra
 
 -- A signature 𝔽 induces a functor ⟦ 𝔽 ⟧
 
-⟦_⟧ : Sig → Type → Type
+⟦_⟧ : Sig → Set → Set
 ⟦ Op ◁ Ar ⟧ X = Σ[ o ∈ Op ] (Ar o → X)
 
 fmap : (A → B) → ⟦ 𝔽 ⟧ A → ⟦ 𝔽 ⟧ B
@@ -49,17 +52,13 @@ fmap f (o , k) = (o , f ∘ k)
 
 -- An 𝔽-algebra on the carrier 𝒞
 
-_-Alg[_] : Sig → Type → Type
+_-Alg[_] : Sig → Set → Set
 𝔽 -Alg[ 𝒞 ] = ⟦ 𝔽 ⟧ 𝒞 → 𝒞
-
-private
-  variable
-    𝒞 𝒟 : Type
 
 ----------------------------------------------------------------------
 -- Terms of an algebra
 
-data Term (𝔽 : Sig) (A : Type) : Type where
+data Term (𝔽 : Sig) (A : Set) : Set where
   var : A → Term 𝔽 A
   op  : ⟦ 𝔽 ⟧ (Term 𝔽 A) → Term 𝔽 A
 
@@ -97,8 +96,8 @@ interp c f (op (o , k)) = c (o , interp c f ∘ k)
 -- two carriers 𝒞 and 𝒟 that commutes with the operations of the
 -- signature.
 
-_⇒_ : 𝔽 -Alg[ 𝒞 ] → 𝔽 -Alg[ 𝒟 ] → Type
-_⇒_ {_} {𝒞} {𝒟} c d = Σ[ h ∈ (𝒞 → 𝒟) ] h ∘ c ≡ d ∘ fmap h
+-- _⇒_ : 𝔽 -Alg[ 𝒞 ] → (𝔽) -Alg[ 𝒟 ] → Set ℓ
+-- _⇒_ {𝒞 = 𝒞} {𝒟 = 𝒟} c d = Σ[ h ∈ (𝒞 → 𝒟) ] h ∘ c ≡ d ∘ fmap h
 
 -- TODO: prove that `Term` is the initial algebra
 
@@ -108,16 +107,16 @@ _⇒_ {_} {𝒞} {𝒟} c d = Σ[ h ∈ (𝒞 → 𝒟) ] h ∘ c ≡ d ∘ fmap
 -- A signature can be interpreted coalgebraically, which also induces
 -- a functor
 
-⟦_⟧′ : Sig → Type → Type
+⟦_⟧′ : Sig → Set → Set
 ⟦ Op ◁ Ar ⟧′ X = Σ[ o ∈ Op ] (Ar o × X)
 
-_-Coalg[_] : Sig → Type → Type
+_-Coalg[_] : Sig → Set → Set
 𝔽 -Coalg[ 𝒞 ] = 𝒞 → ⟦ 𝔽 ⟧′ 𝒞
 
 ----------------------------------------------------------------------
 -- Coterms of a coalgebra
 
-record CoTerm (𝔽 : Sig) (A : Type) : Type where
+record CoTerm (𝔽 : Sig) (A : Set) : Set where
   coinductive
   field
     covar : A
@@ -141,7 +140,7 @@ coterm-coalg = coop
 ----------------------------------------------------------------------
 -- Program/environment interactions
 
-data _⇔_ {𝔽 : Sig} {A} {B} : Term 𝔽 A → CoTerm 𝔽 B → Type₁ where
+data _⇔_ {𝔽 : Sig} {A} {B} : Term 𝔽 A → CoTerm 𝔽 B → Set₁ where
 
   done : ∀ {a} {τ}
        → return a ⇔ τ
