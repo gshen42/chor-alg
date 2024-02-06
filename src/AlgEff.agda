@@ -16,13 +16,12 @@ open import Relation.Binary.PropositionalEquality using (_≡_)
 private
   variable
     a b c d ℓ : Level
-    A B       : Set ℓ
-    𝒞 𝒟      : Set ℓ
+    A B C D   : Set ℓ
 
 ----------------------------------------------------------------------
 -- Signature
 
-record Sig {a} {b} : Set (suc (a ⊔ b)) where
+record Sig (a : Level) (b : Level) : Set (suc (a ⊔ b)) where
   constructor _◁_
   field
     Op    : Set a
@@ -32,33 +31,33 @@ open Sig
 
 private
   variable
-    𝔽 : Sig
+    𝔽 : Sig a b
 
-_:+:_ : Sig {a} {b} → Sig {c} {d} → Sig {a ⊔ c} {suc (b ⊔ d)}
-𝔽 :+: 𝔾 = (Op 𝔽 ⊎ Op 𝔾) ◁ [ Lift _ ∘ Arity 𝔽 , Lift _ ∘ Arity 𝔾 ]
+_:+:_ : Sig a b → Sig c d → Sig (a ⊔ c) (suc (b ⊔ d))
+𝔽 :+: 𝔽′ = (Op 𝔽 ⊎ Op 𝔽′) ◁ [ Lift _ ∘ Arity 𝔽 , Lift _ ∘ Arity 𝔽′ ]
 
 -- ^ I don't fully understand why the above definition works.
 
 ----------------------------------------------------------------------
 -- Algebra
 
--- A signature 𝔽 induces a functor ⟦ 𝔽 ⟧
+-- A signature 𝔽` induces a functor ⟦ 𝔽 ⟧
 
-⟦_⟧ : Sig → Set → Set
+⟦_⟧ : Sig a b → Set ℓ → Set _
 ⟦ Op ◁ Ar ⟧ X = Σ[ o ∈ Op ] (Ar o → X)
 
 fmap : (A → B) → ⟦ 𝔽 ⟧ A → ⟦ 𝔽 ⟧ B
 fmap f (o , k) = (o , f ∘ k)
 
--- An 𝔽-algebra on the carrier 𝒞
+-- An 𝔽-algebra on carrier set C
 
-_-Alg[_] : Sig → Set → Set
-𝔽 -Alg[ 𝒞 ] = ⟦ 𝔽 ⟧ 𝒞 → 𝒞
+_-Alg[_] : Sig a b → Set ℓ → Set _
+𝔽 -Alg[ C ] = ⟦ 𝔽 ⟧ C → C
 
 ----------------------------------------------------------------------
 -- Terms of an algebra
 
-data Term (𝔽 : Sig) (A : Set) : Set where
+data Term (𝔽 : Sig a b) (A : Set ℓ) : Set (a ⊔ b ⊔ ℓ) where
   var : A → Term 𝔽 A
   op  : ⟦ 𝔽 ⟧ (Term 𝔽 A) → Term 𝔽 A
 
@@ -86,18 +85,18 @@ op (o , k) >>= f = op (o , _>>= f ∘ k)
 -- signature. Such a homomorphism gives rise to effect handlers in
 -- algebraic effects.
 
-interp : 𝔽 -Alg[ 𝒞 ] → (A → 𝒞) → Term 𝔽 A → 𝒞
+interp : 𝔽 -Alg[ C ] → (A → C) → Term 𝔽 A → C
 interp c f (var x)      = f x
 interp c f (op (o , k)) = c (o , interp c f ∘ k)
   -- ^ why `interp c f (op t) = c (fmap (interp c f) t)` doesn't pass
   -- the termination checking?
 
 -- A homomorphism between two 𝔽-algebras is a function h between the
--- two carriers 𝒞 and 𝒟 that commutes with the operations of the
+-- two carriers C and D that commutes with the operations of the
 -- signature.
 
--- _⇒_ : 𝔽 -Alg[ 𝒞 ] → (𝔽) -Alg[ 𝒟 ] → Set ℓ
--- _⇒_ {𝒞 = 𝒞} {𝒟 = 𝒟} c d = Σ[ h ∈ (𝒞 → 𝒟) ] h ∘ c ≡ d ∘ fmap h
+_⇒_ : 𝔽 -Alg[ C ] → 𝔽 -Alg[ D ] → Set _
+_⇒_ {C = C} {D = D} c d = Σ[ h ∈ (C → D) ] h ∘ c ≡ d ∘ fmap h
 
 -- TODO: prove that `Term` is the initial algebra
 
@@ -107,16 +106,16 @@ interp c f (op (o , k)) = c (o , interp c f ∘ k)
 -- A signature can be interpreted coalgebraically, which also induces
 -- a functor
 
-⟦_⟧′ : Sig → Set → Set
+⟦_⟧′ : Sig a b → Set ℓ → Set _
 ⟦ Op ◁ Ar ⟧′ X = Σ[ o ∈ Op ] (Ar o × X)
 
-_-Coalg[_] : Sig → Set → Set
+_-Coalg[_] : Sig a b → Set ℓ → Set _
 𝔽 -Coalg[ 𝒞 ] = 𝒞 → ⟦ 𝔽 ⟧′ 𝒞
 
 ----------------------------------------------------------------------
 -- Coterms of a coalgebra
 
-record CoTerm (𝔽 : Sig) (A : Set) : Set where
+record CoTerm (𝔽 : Sig a b) (A : Set ℓ) : Set (a ⊔ b ⊔ ℓ) where
   coinductive
   field
     covar : A
@@ -140,7 +139,7 @@ coterm-coalg = coop
 ----------------------------------------------------------------------
 -- Program/environment interactions
 
-data _⇔_ {𝔽 : Sig} {A} {B} : Term 𝔽 A → CoTerm 𝔽 B → Set₁ where
+data _⇔_ {𝔽 : Sig a b} {A : Set ℓ} {B : Set ℓ} : Term 𝔽 A → CoTerm 𝔽 B → Set (a ⊔ b ⊔ ℓ) where
 
   done : ∀ {a} {τ}
        → return a ⇔ τ
