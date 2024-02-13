@@ -3,8 +3,6 @@
 -- highly inspired by https://doisinkidney.com/pdfs/algebraic-free-monads.pdf.
 ----------------------------------------------------------------------
 
-{-# OPTIONS --guardedness #-}
-
 module AlgEff where
 
 open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
@@ -99,52 +97,3 @@ _⇒_ : 𝔽 -Alg[ C ] → 𝔽 -Alg[ D ] → Set _
 _⇒_ {C = C} {D = D} c d = Σ[ h ∈ (C → D) ] h ∘ c ≡ d ∘ fmap h
 
 -- TODO: prove that `Term` is the initial algebra
-
-----------------------------------------------------------------------
--- Coalgebra
-
--- A signature can be interpreted coalgebraically, which also induces
--- a functor
-
-⟦_⟧′ : Sig a b → Set ℓ → Set _
-⟦ Op ◁ Ar ⟧′ X = Σ[ o ∈ Op ] (Ar o × X)
-
-_-Coalg[_] : Sig a b → Set ℓ → Set _
-𝔽 -Coalg[ 𝒞 ] = 𝒞 → ⟦ 𝔽 ⟧′ 𝒞
-
-----------------------------------------------------------------------
--- Coterms of a coalgebra
-
-record CoTerm (𝔽 : Sig a b) (A : Set ℓ) : Set (a ⊔ b ⊔ ℓ) where
-  coinductive
-  field
-    covar : A
-    coop  : ⟦ 𝔽 ⟧′ (CoTerm 𝔽 A)
-
-open CoTerm
-
--- `CoTerm` is a coalgebra for any signature `𝔽` through `coop`
-
-coterm-coalg : 𝔽 -Coalg[ CoTerm 𝔽 A ]
-coterm-coalg = coop
-
--- TODO: Is `CoTerm` a comonad?
-
-----------------------------------------------------------------------
--- TODO: Coterms are the final coalgebra
-
--- A final coalgebra of a signature has an unique homomorphism *from*
--- arbitrary algebra of the same signature.
-
-----------------------------------------------------------------------
--- Program/environment interactions
-
-data _⇔_ {𝔽 : Sig a b} {A : Set ℓ} {B : Set ℓ} : Term 𝔽 A → CoTerm 𝔽 B → Set (a ⊔ b ⊔ ℓ) where
-
-  done : ∀ {a} {τ}
-       → return a ⇔ τ
-
-  step : ∀ {o} {k} {ar} {τ τ′}
-       → coop τ ≡ (o , ar , τ′)
-       → k ar ⇔ τ′
-       → op (o , k) ⇔ τ
