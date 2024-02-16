@@ -75,6 +75,12 @@ op (o , k) >>= f = op (o , _>>= f ∘ k)
   -- ^ why `op t >>= f = op (fmap (_>>= f) t)` doesn't pass the
   -- termination checking?
 
+_>>_ : Term 𝔽 A → Term 𝔽 B → Term 𝔽 B
+t₁ >> t₂ = t₁ >>= λ _ → t₂
+
+perform : ∀ (o : Op 𝔽) → Term 𝔽 (Arity 𝔽 o)
+perform o = op (o , return)
+
 ----------------------------------------------------------------------
 -- Terms are the initial algebra
 
