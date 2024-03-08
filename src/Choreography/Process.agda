@@ -1,27 +1,31 @@
-module Choreography.Process where
-
 open import AlgEff
-open import Choreography.Loc
+open import Level using (Level)
+
+-- Parameterize all definitions over a signature `𝕃` that specifies
+-- what local computation a process can do
+
+module Choreography.Process {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂) where
+
+open import Choreography.Loc hiding (⊤)
 open import Data.Unit using (⊤)
-open import Level using (Level; _⊔_; suc)
+open import Level using (_⊔_; suc)
 
 private
   variable
-    a b : Level
-    L   : Sig a b
+    A : Set
 
-----------------------------------------------------------------------
--- Signature
+data Op : Set (suc (ℓ₁ ⊔ ℓ₂)) where
+  `locally : Term 𝕃 A → Op
+  `send    : Loc → A → Op
+  `recv    : {A : Set} → Loc → Op
 
-data Op (L : Sig a b) : Set (suc (a ⊔ b)) where
-  `locally : ∀ {A : Set} → Term L A → Op L
-  `send    : ∀ {A : Set} → Loc → A → Op L
-  `recv    : ∀ {A : Set} → Loc → Op L
-
-Arity : Op L → Set
+Arity : Op → Set
 Arity (`locally {A} _) = A
 Arity (`send _ _)      = ⊤
 Arity (`recv {A} _)    = A
 
-Process : Sig a b → Sig _ _
-Process L = Op L ◁ Arity
+ℙ : Sig _ _
+ℙ = Op ◁ Arity
+
+ℙrocess : Set → Set _
+ℙrocess A = Term ℙ A

@@ -1,50 +1,56 @@
-module Choreography.Choreo where
-
 open import AlgEff
+open import Level using (Level)
+
+-- Parameterize all definitions over a signature `𝕃` that specifies
+-- what local computation a process can do
+
+module Choreography.Choreo {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂) where
+
 open import Choreography.Loc
-open import Choreography.Process using (Process; `locally; `send; `recv)
-open import Data.Unit using (⊤; tt)
 open import Data.Maybe using (Maybe; nothing; just)
 open import Data.Product using (_,_)
+open import Effect.Monad using (RawMonad)
 open import Function using (_∘_)
-open import Level using (Level; _⊔_; suc)
+open import Level using (_⊔_; suc)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 open import Relation.Nullary using (yes; no)
 
+import Choreography.Process
+open module Process = Choreography.Process 𝕃 hiding (Op; Arity)
+
+open RawMonad ⦃...⦄
+
 private
   variable
-    a b : Level
-    L   : Sig a b
+    A B   : Set
+    a     : A
+    l     : Loc
+    t₁ t₂ : Term 𝕃 A
 
 ----------------------------------------------------------------------
 -- Signature
 
-data Op (L : Sig a b) : Set (suc (a ⊔ b)) where
-  `locally : ∀ {A : Set} → Loc → Term L A → Op L
-  `comm    : ∀ {A : Set} → (s r : Loc) → A at s → Op L
+data Op (l : Loc) : Set (suc (ℓ₁ ⊔ ℓ₂)) where
+  `comm : (s r : Loc) → ((Term 𝕃 A) at s) l → Op l
 
-Arity : Op L → Set
-Arity (`locally {A} l _) = A at l
-Arity (`comm {A} _ r _)  = A at r
+Arity : (l : Loc) → Op l → Set _
+Arity l (`comm {A} _ r _) = (A at r) l
 
-Choreo : Sig a b → Sig _ _
-Choreo L = Op L ◁ Arity
+ℂ : Loc → Sig _ _
+ℂ l = Op l ◁ Arity l
+
+ℂhoreo : Set → Set _
+ℂhoreo A = ∀ {l} → Term (ℂ l) A
 
 ----------------------------------------------------------------------
--- Semantics
+-- Endpoint projection
 
-epp : ∀ {A : Set} → Term (Choreo L) A → Loc → Term (Process L) A
-epp c l = interp alg return c
+epp : ℂhoreo A → Loc → ℙrocess A
+epp c l = interp alg return (c {l})
   where
-    opaque
-      unfolding _at_
-
-      alg : ∀ {A : Set} → Choreo L -Alg[ Term (Process L) A ]
-      alg (`locally l′ t , k) with l ≟ l′
-      ... | yes _ = perform (`locally (t >>= (return ∘ just))) >>= k
-      ... | no  _ = k nothing
-      alg (`comm s r a , k) with l ≟ s | l ≟ r
-      ... | yes _ | yes _ = k a
-      ... | yes _ | no  _ = perform (`send r a) >> k nothing
-      ... | no  _ | yes _ = perform (`recv s) >>= k
-      ... | no  _ | no  _ = k nothing
+    alg : ℂ l -Alg[ ℙrocess A ]
+    alg (`comm s r a , k) with l ≟ s | l ≟ r
+    ... | yes _ | yes _ = perform (`locally a) >>= k
+    ... | yes _ | no  _ = perform (`locally a) >>= (λ x → perform (`send r x)) >> k tt
+    ... | no  _ | yes _ = perform (`recv s) >>= k
+    ... | no  _ | no  _ = k tt
