@@ -9,6 +9,7 @@ open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; [_,_])
 open import Effect.Functor using (RawFunctor)
 open import Effect.Monad using (RawMonad)
+open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
 open import Level using (Level; suc; _⊔_; Lift)
 open import Relation.Binary.PropositionalEquality using (_≡_)
@@ -71,22 +72,10 @@ term-alg = op
 
 instance
   term-monad : RawMonad {ℓ} (Term 𝔽)
-  term-monad = record
-    { rawApplicative = record
-      { rawFunctor = record
-        { _<$>_ = λ f ma → ma >>= λ a → pure (f a)
-        }
-      ; pure = pure
-      ; _<*>_ = λ mf mx → do
-          f <- mf
-          x <- mx
-          pure (f x)
-      }
-    ; _>>=_ = _>>=_
-    }
+  term-monad = mkRawMonad _ return _>>=_
     where
-      pure : A → Term 𝔽 A
-      pure = var
+      return : A → Term 𝔽 A
+      return = var
 
       _>>=_ : Term 𝔽 A → (A → Term 𝔽 B) → Term 𝔽 B
       var x      >>= f = f x
