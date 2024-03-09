@@ -3,6 +3,7 @@
 -- changing the type of `F` to `Set f → Set g`.
 
 -- TODO: submit a PR to stdlib
+-- ^ DONE: https://github.com/agda/agda-stdlib/pull/2314
 
 module Effect.Monad.MyStuff where
 
