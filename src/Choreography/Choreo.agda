@@ -10,6 +10,7 @@ open import Choreography.Loc
 open import Data.Maybe using (Maybe; nothing; just)
 open import Data.Product using (_,_)
 open import Effect.Monad using (RawMonad)
+open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
 open import Level using (_⊔_; suc)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
@@ -20,12 +21,13 @@ open module Process = Choreography.Process 𝕃 hiding (Op; Arity)
 
 open RawMonad ⦃...⦄
 
+infix 20 _▷_
+infix 20 _⇨_◇_
+
 private
   variable
     A B   : Set
-    a     : A
-    l     : Loc
-    t₁ t₂ : Term 𝕃 A
+    l s r : Loc
 
 ----------------------------------------------------------------------
 -- Signature
@@ -39,8 +41,22 @@ Arity l (`comm {A} _ r _) = (A at r) l
 ℂ : Loc → Sig _ _
 ℂ l = Op l ◁ Arity l
 
-ℂhoreo : Set → Set _
+----------------------------------------------------------------------
+-- Shorthands
+
+ℂhoreo : Set → Set (suc (ℓ₁ ⊔ ℓ₂))
 ℂhoreo A = ∀ {l} → Term (ℂ l) A
+
+-- use `\Tw` to type `▷`
+
+_▷_ : (s : Loc) → ((Term 𝕃 A) at s) l → Term (ℂ l) ((A at s) l)
+s ▷ t = perform (`comm s s t)
+
+-- use `\r` to type `⇨`
+-- use `\di` to type `◇`
+
+_⇨_◇_ : (s r : Loc) → ((Term 𝕃 A) at s) l → Term (ℂ l) ((A at r) l)
+s ⇨ r ◇ t = perform (`comm s r t)
 
 ----------------------------------------------------------------------
 -- Endpoint projection
@@ -48,9 +64,9 @@ Arity l (`comm {A} _ r _) = (A at r) l
 epp : ℂhoreo A → Loc → ℙrocess A
 epp c l = interp alg return (c {l})
   where
-    alg : ℂ l -Alg[ ℙrocess A ]
-    alg (`comm s r a , k) with l ≟ s | l ≟ r
-    ... | yes _ | yes _ = perform (`locally a) >>= k
-    ... | yes _ | no  _ = perform (`locally a) >>= (λ x → perform (`send r x)) >> k tt
-    ... | no  _ | yes _ = perform (`recv s) >>= k
-    ... | no  _ | no  _ = k tt
+  alg : (ℂ l) -Alg[ ℙrocess A ]
+  alg (`comm s r a , k) with l ≟ s | l ≟ r
+  ... | yes _ | yes _ = locally a >>= k
+  ... | yes _ | no  _ = locally a >>= (λ x → send r x) >> k tt
+  ... | no  _ | yes _ = recv s >>= k
+  ... | no  _ | no  _ = k tt
