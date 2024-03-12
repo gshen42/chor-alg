@@ -44,8 +44,8 @@ Arity l (`comm {A} _ r _) = (A at r) l
 ----------------------------------------------------------------------
 -- Shorthands
 
-ℂhoreo : Set → Set (suc (ℓ₁ ⊔ ℓ₂))
-ℂhoreo A = ∀ {l} → Term (ℂ l) A
+ℂhoreo : (Loc → Set) → Set (suc (ℓ₁ ⊔ ℓ₂))
+ℂhoreo F = ∀ {l} → Term (ℂ l) (F l)
 
 -- use `\Tw` to type `▷`
 
@@ -61,7 +61,7 @@ s ⇨ r ◇ t = perform (`comm s r t)
 ----------------------------------------------------------------------
 -- Endpoint projection
 
-epp : ℂhoreo A → Loc → ℙrocess A
+epp : ∀ {F : Loc → Set} → ℂhoreo F → (l : Loc) → ℙrocess (F l)
 epp c l = interp alg return (c {l})
   where
   alg : (ℂ l) -Alg[ ℙrocess A ]

@@ -42,8 +42,8 @@ top-monad = mkRawMonad _ (λ _ → tt) (λ _ _ → tt)
 id-monad : RawMonad {ℓ} (λ A → A)
 id-monad = mkRawMonad _ (λ x → x) (λ x f → f x)
 
--- I don't know how to name this
-weird-monad : ∀ {l l′} → RawMonad {ℓ} (λ A → (A at l) l′)
-weird-monad {l = l} {l′ = l′} with l′ ≟ l
-... | yes _ = id-monad
-... | no  _ = top-monad
+instance
+  weird-monad : ∀ {l l′} → RawMonad {ℓ} (λ A → (A at l) l′)
+  weird-monad {l = l} {l′ = l′} with l′ ≟ l
+  ... | yes _ = id-monad
+  ... | no  _ = top-monad
