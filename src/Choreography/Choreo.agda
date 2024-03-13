@@ -30,11 +30,8 @@ At = ∀ {ℓ} → Set ℓ → Loc → Set ℓ
 
 module _ {_＠_ : At} where
 
-  infix 20 _▷_
-  infix 20 _⇨_◇_
-
-  --------------------------------------------------------------------
-  -- Signature
+----------------------------------------------------------------------
+-- Signature
 
   data Op : Set (suc (ℓ₁ ⊔ ℓ₂)) where
     `comm : (s r : Loc) → (Term 𝕃 A) ＠ s → Op
@@ -45,8 +42,11 @@ module _ {_＠_ : At} where
   ℂ : Sig _ _
   ℂ = Op ◁ Arity
 
-  ------------------------------------------------------------------
-  -- Shorthands
+--------------------------------------------------------------------
+-- Shorthands
+
+  infix 20 _▷_
+  infix 20 _⇨_◇_
 
   -- use `\Tw` to type `▷`
 
@@ -88,7 +88,7 @@ instance
   focus-monad {l = l} {s = s} with l ≟ s
   ... | yes _ = id-monad
   ... | no  _ = top-monad
-        
+
 import Choreography.Process
 open module Process = Choreography.Process 𝕃 hiding (Op; Arity)
 
