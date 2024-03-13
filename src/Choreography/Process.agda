@@ -3,7 +3,7 @@ open import Level using (Level)
 
 module Choreography.Process {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂) where
 
-open import Choreography.Loc hiding (⊤)
+open import Choreography.Loc
 open import Data.Unit using (⊤)
 open import Level using (_⊔_; suc)
 

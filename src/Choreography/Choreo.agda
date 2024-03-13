@@ -12,59 +12,92 @@ open import Data.Product using (_,_)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
-open import Level using (_⊔_; suc)
+open import Level using (_⊔_; suc; Setω)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 open import Relation.Nullary using (yes; no)
 
+private
+  variable
+    ℓ ℓ′  : Level
+    A B   : Set
+    l s r : Loc
+
+----------------------------------------------------------------------
+-- An general interface for _＠_
+
+At : Setω
+At = ∀ {ℓ} → Set ℓ → Loc → Set ℓ
+
+module _ {_＠_ : At} where
+
+  infix 20 _▷_
+  infix 20 _⇨_◇_
+
+  --------------------------------------------------------------------
+  -- Signature
+
+  data Op : Set (suc (ℓ₁ ⊔ ℓ₂)) where
+    `comm : (s r : Loc) → (Term 𝕃 A) ＠ s → Op
+
+  Arity : Op → Set _
+  Arity (`comm {A} _ r _) = A ＠ r
+
+  ℂ : Sig _ _
+  ℂ = Op ◁ Arity
+
+  ------------------------------------------------------------------
+  -- Shorthands
+
+  -- use `\Tw` to type `▷`
+
+  _▷_ : (s : Loc) → (Term 𝕃 A) ＠ s → Term ℂ (A ＠ s)
+  s ▷ t = perform (`comm s s t)
+
+  -- use `\r` to type `⇨`
+  -- use `\di` to type `◇`
+
+  _⇨_◇_ : (s r : Loc) → (Term 𝕃 A) ＠ s → Term ℂ (A ＠ r)
+  s ⇨ r ◇ t = perform (`comm s r t)
+
+  ℂhoreoFocused : Set → Set _
+  ℂhoreoFocused A = Term ℂ A
+
+ℂhoreo : (At → Set) → Setω
+ℂhoreo F = ∀ {_＠_ : At} {{＠-monad : ∀ {ℓ} {l} → RawMonad {ℓ} (_＠ l) }} → ℂhoreoFocused {_＠_} (F _＠_)
+
+----------------------------------------------------------------------
+-- Endpoint projection
+
+-- the stdlib's ⊤ is not universe-polymorphic
+record ⊤ {ℓ : Level} : Set ℓ where
+  constructor tt
+
+focus : Loc → At
+focus l A s with l ≟ s
+... | yes _ = A
+... | no  _ = ⊤
+
+id-monad : RawMonad {ℓ} (λ A → A)
+id-monad = mkRawMonad _ (λ x → x) (λ x f → f x)
+
+top-monad : RawMonad {ℓ} {ℓ′} (λ A → ⊤)
+top-monad = mkRawMonad _ (λ _ → tt) (λ _ _ → tt)
+
+instance
+  focus-monad : ∀ {l s} → RawMonad {ℓ} (λ A → focus l A s)
+  focus-monad {l = l} {s = s} with l ≟ s
+  ... | yes _ = id-monad
+  ... | no  _ = top-monad
+        
 import Choreography.Process
 open module Process = Choreography.Process 𝕃 hiding (Op; Arity)
 
 open RawMonad ⦃...⦄
 
-infix 20 _▷_
-infix 20 _⇨_◇_
-
-private
-  variable
-    A B   : Set
-    l s r : Loc
-
-----------------------------------------------------------------------
--- Signature
-
-data Op (l : Loc) : Set (suc (ℓ₁ ⊔ ℓ₂)) where
-  `comm : (s r : Loc) → ((Term 𝕃 A) at s) l → Op l
-
-Arity : (l : Loc) → Op l → Set _
-Arity l (`comm {A} _ r _) = (A at r) l
-
-ℂ : Loc → Sig _ _
-ℂ l = Op l ◁ Arity l
-
-----------------------------------------------------------------------
--- Shorthands
-
-ℂhoreo : (Loc → Set) → Set (suc (ℓ₁ ⊔ ℓ₂))
-ℂhoreo F = ∀ {l} → Term (ℂ l) (F l)
-
--- use `\Tw` to type `▷`
-
-_▷_ : (s : Loc) → ((Term 𝕃 A) at s) l → Term (ℂ l) ((A at s) l)
-s ▷ t = perform (`comm s s t)
-
--- use `\r` to type `⇨`
--- use `\di` to type `◇`
-
-_⇨_◇_ : (s r : Loc) → ((Term 𝕃 A) at s) l → Term (ℂ l) ((A at r) l)
-s ⇨ r ◇ t = perform (`comm s r t)
-
-----------------------------------------------------------------------
--- Endpoint projection
-
-epp : ∀ {F : Loc → Set} → ℂhoreo F → (l : Loc) → ℙrocess (F l)
-epp c l = interp alg return (c {l})
+epp : ∀ {F} → ℂhoreo F → (l : Loc) → ℙrocess (F (focus l))
+epp c l = interp alg return c
   where
-  alg : (ℂ l) -Alg[ ℙrocess A ]
+  alg : (ℂ {focus l}) -Alg[ Term ℙ A ]
   alg (`comm s r a , k) with l ≟ s | l ≟ r
   ... | yes _ | yes _ = locally a >>= k
   ... | yes _ | no  _ = locally a >>= (λ x → send r x) >> k tt

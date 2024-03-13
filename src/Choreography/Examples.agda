@@ -41,7 +41,7 @@ module Foo where
     parse : String → IO ℕ
     _≥_ : ℕ → ℕ → Bool
 
-  max : ℂhoreo (ℕ at "alice")
+  max : ℂhoreo λ _＠_ → ℕ ＠ "alice"
   max = do
     x ← "bob" ⇨ "alice" ◇ do
       let t = getLine >>= parse
