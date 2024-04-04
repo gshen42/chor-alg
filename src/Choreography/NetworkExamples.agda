@@ -1,5 +1,3 @@
-{-# OPTIONS --guardedness #-}
-
 open import AlgEff
 open import Level using (Level; suc; _⊔_)
 
