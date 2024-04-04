@@ -1,19 +1,20 @@
 open import AlgEff
 open import Level using (Level)
+open import Relation.Binary.PropositionalEquality using (_≡_)
+open import Relation.Nullary using (Dec)
 
--- Parameterize all definitions over a signature `𝕃` that specifies
--- what local computation a process can do
+module Choreography.Choreo
+  (Loc : Set) (_≟_ : (l l′ : Loc) → Dec (l ≡ l′))
+  {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂)
+  where
 
-module Choreography.Choreo {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂) where
-
-open import Choreography.Loc
 open import Data.Maybe using (Maybe; nothing; just)
 open import Data.Product using (_,_)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
 open import Level using (_⊔_; suc; Setω)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Binary.PropositionalEquality using (refl)
 open import Relation.Nullary using (yes; no)
 
 private
@@ -90,7 +91,7 @@ instance
   ... | no  _ = top-monad
 
 import Choreography.Process
-open module Process = Choreography.Process 𝕃 hiding (Op; Arity)
+open module Process = Choreography.Process Loc 𝕃 hiding (Op; Arity)
 
 open RawMonad ⦃...⦄
 

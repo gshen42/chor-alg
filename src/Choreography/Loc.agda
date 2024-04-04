@@ -1,12 +1,26 @@
 module Choreography.Loc where
 
-open import Data.String as String using (String)
-open import Relation.Nullary using (Dec)
-open import Relation.Binary.PropositionalEquality using (_≡_)
+open import Relation.Nullary using (Dec; yes; no)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
-Loc : Set
-Loc = String
+-- Any type with decidable equality can be used as a location type
 
-opaque
-  _≟_ : (l l′ : Loc) → Dec (l ≡ l′)
-  _≟_ = String._≟_
+-- Here, we present a canonical location type `ABC`, which contains
+-- three familiar locations --- Alice, Bob, and Carol --- that we'll
+-- be using in examples.
+
+data ABC : Set where
+  `alice : ABC
+  `bob   : ABC
+  `carol : ABC
+
+_≟_ : (l l′ : ABC) → Dec (l ≡ l′)
+`alice ≟ `alice = yes refl
+`alice ≟ `bob   = no λ ()
+`alice ≟ `carol = no λ ()
+`bob   ≟ `alice = no λ ()
+`bob   ≟ `bob   = yes refl
+`bob   ≟ `carol = no λ ()
+`carol ≟ `alice = no λ ()
+`carol ≟ `bob   = no λ ()
+`carol ≟ `carol = yes refl
