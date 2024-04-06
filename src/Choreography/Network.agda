@@ -20,12 +20,10 @@ open module Process = Choreography.Process Loc 𝕃
 
 private
   variable
-    l s r l′ : Loc
-    F : Loc → Set
     A B   : Set
-    a     : A
+    l l′  : Loc
+    F     : Loc → Set
     p     : ℙrocess A
-    k k′  : A → ℙrocess B
     t     : Term 𝕃 A
 
 -- A network is a collection of processes, each of which might return a different value
@@ -58,19 +56,21 @@ opaque
 
 -- An operational semantics for networks.
 
-data _⇒ⁿ_ : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂))where
+data _⇒ⁿ_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂))where
 
-  local⇒ⁿ : n l ≡ op (`locally t , k) →
+  local⇒ⁿ : ∀ l a {k} →
+            n l ≡ op (`locally t , k) →
             n ⇒ⁿ (update l (k a) n)
 
-  comm⇒ⁿ : n s ≡ op (`send {A} r a , k) →
+  comm⇒ⁿ : ∀ s r a {k} {k′} →
+           n s ≡ op (`send {A} r a , k) →
            n r ≡ op (`recv {A} s , k′) →
            n ⇒ⁿ (update s (k tt) (update r (k′ a) n))
 
 -- Deadlock freedom
 
-data _✓ : Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+data _✓ {F} : Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
 
-  end : (∀ l → ∃[ a ] n l ≡ var a) → n ✓
+  end : (∀ l → ∃[ x ] n l ≡ var x) → n ✓
 
-  step : n ⇒ⁿ n′ → n′ ✓ → n ✓
+  step : (∀ n′ → n ⇒ⁿ n′ → n′ ✓) → n ✓
