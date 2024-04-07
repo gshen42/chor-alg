@@ -26,12 +26,10 @@ open RawMonad ⦃...⦄
 postulate
   X Y Z W U : Set
   getInput : Term 𝕃 X
-  x : X
   f : X → Y
   g : Y → Z
   h : Z → W
   showResults : W → Term 𝕃 U
-  u : U
 
 alice : ℙrocess U
 alice = do
@@ -60,18 +58,17 @@ ex₁ `alice = alice
 ex₁ `bob   = bob
 ex₁ `carol = carol
 
--- TODO: fix this example
--- ex₁✓ : ex₁ ✓
--- ex₁✓ = step (local⇒ⁿ {l = `alice} {a = x} refl)
---          (step (comm⇒ⁿ {s = `alice} {r = `bob} (rewrite₁) (rewrite₂ λ ()))
---            (step (comm⇒ⁿ {s = `bob} {r = `carol} (trans (rewrite₂ λ ()) rewrite₁) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) (rewrite₂ λ ()))))
---              (step (comm⇒ⁿ {s = `carol} {r = `alice} (trans (rewrite₂ λ ()) rewrite₁) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) rewrite₁)))
---               (step (local⇒ⁿ {l = `alice} {a = u} (trans (rewrite₂ λ ()) rewrite₁))
---                 (end
---                   λ where
---                   `alice → _ , rewrite₁
---                   `bob   → _ , trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) rewrite₁))
---                   `carol → _ , trans (rewrite₂ λ ()) rewrite₁)))))
+ex₁✓ : ex₁ ✓
+ex₁✓ = step (local⇒ⁿ `alice refl)
+         (step (comm⇒ⁿ `alice `bob _ (rewrite₁) (rewrite₂ λ ()))
+           (step (comm⇒ⁿ `bob `carol _ (trans (rewrite₂ λ ()) rewrite₁) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) (rewrite₂ λ ()))))
+             (step (comm⇒ⁿ `carol `alice _ (trans (rewrite₂ λ ()) rewrite₁) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) rewrite₁)))
+              (step (local⇒ⁿ `alice (trans (rewrite₂ λ ()) rewrite₁))
+                (end
+                  λ where
+                  `alice → _ , rewrite₁
+                  `bob   → _ , trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) (trans (rewrite₂ λ ()) rewrite₁))
+                  `carol → _ , trans (rewrite₂ λ ()) rewrite₁)))))
 
 alice′ : ℙrocess U
 alice′ = do

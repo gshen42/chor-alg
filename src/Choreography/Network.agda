@@ -12,7 +12,7 @@ open import Data.Empty using (⊥-elim)
 open import Data.Product using (∃; ∃-syntax; _,_; _×_)
 open import Data.Sum using (_⊎_)
 open import Data.Unit using (⊤; tt)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; _≢_)
+open import Relation.Binary.PropositionalEquality as Eq using (_≡_; refl; _≢_; trans; sym; subst)
 open import Relation.Nullary using (yes; no)
 
 import Choreography.Process
@@ -23,7 +23,7 @@ private
     A B   : Set
     l l′  : Loc
     F     : Loc → Set
-    p     : ℙrocess A
+    p p′  : ℙrocess A
     t     : Term 𝕃 A
 
 -- A network is a collection of processes, each of which might return a different value
@@ -33,7 +33,7 @@ Network F = (l : Loc) → ℙrocess (F l)
 
 private
   variable
-    n n′  : Network F
+    n n′ n″ n‴ : Network F
 
 -- Update one of the process in a network
 -- no unfolding by default
@@ -54,18 +54,47 @@ opaque
   ... | yes x = ⊥-elim (l≢l′ x)
   ... | no  _ = refl
 
+  postulate
+    swap : l ≢ l′ → update l p (update l′ p′ n) ≡ update l′ p′ (update l p n)
+
 -- An operational semantics for networks.
 
-data _⇒ⁿ_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂))where
+postulate
+  𝕃-handler : ∀ {A : Set} → Term 𝕃 A → A
 
-  local⇒ⁿ : ∀ l a {k} →
+data _⇒ⁿ_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+
+  local⇒ⁿ : ∀ l {k} {t : Term 𝕃 A} →
             n l ≡ op (`locally t , k) →
-            n ⇒ⁿ (update l (k a) n)
+            n ⇒ⁿ (update l (k (𝕃-handler t)) n)
 
   comm⇒ⁿ : ∀ s r a {k} {k′} →
            n s ≡ op (`send {A} r a , k) →
            n r ≡ op (`recv {A} s , k′) →
            n ⇒ⁿ (update s (k tt) (update r (k′ a) n))
+
+data _⇒⋆_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+
+  refl : n ⇒⋆ n
+
+  step : n ⇒ⁿ n′ → n′ ⇒⋆ n″ → n ⇒⋆ n″
+
+-- ⇒ⁿ has the diamond property
+
+postulate
+  diamond : n ⇒ⁿ n′ → n ⇒ⁿ n″ → ∃[ n‴ ] n′ ⇒⋆ n‴ × n″ ⇒⋆ n‴
+
+  -- diamond {n = n} (local⇒ⁿ l eq₁) (local⇒ⁿ l′ eq₂) with l ≟ l′
+  -- ... | yes refl with trans (sym eq₁) eq₂
+  -- ...   | refl = _ , refl , refl
+  -- diamond {n = n} (local⇒ⁿ l {k} {t} eq₁) (local⇒ⁿ l′ {k′} {t′} eq₂) | no l≢l′ =
+  --   update l′ (k′ (𝕃-handler t′)) (update l (k (𝕃-handler t)) n)
+  --   , step (local⇒ⁿ l′ (trans (rewrite₂ l≢l′) eq₂)) refl
+  --   , subst (λ x → update l′ (k′ (𝕃-handler t′)) n ⇒⋆ x) (swap l≢l′) (step (local⇒ⁿ l (trans (rewrite₂ λ x → ⊥-elim (l≢l′ (Eq.sym x))) eq₁)) refl)
+
+  -- diamond (local⇒ⁿ l eq₁) (comm⇒ⁿ s r a eq₂ eq₃) = {!!}
+
+  -- diamond (comm⇒ⁿ s r a eq₂ eq₃) y = {!!}
 
 -- Deadlock freedom
 
@@ -73,4 +102,4 @@ data _✓ {F} : Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
 
   end : (∀ l → ∃[ x ] n l ≡ var x) → n ✓
 
-  step : (∀ n′ → n ⇒ⁿ n′ → n′ ✓) → n ✓
+  step : n ⇒ⁿ n′ → n′ ✓ → n ✓
