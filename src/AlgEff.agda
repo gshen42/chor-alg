@@ -5,13 +5,10 @@
 
 module AlgEff where
 
-open import Data.Product using (Σ; Σ-syntax; _×_; _,_; proj₁; proj₂)
-open import Data.Sum using (_⊎_; [_,_])
+open import Data.Product using (Σ; Σ-syntax; _,_)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
-open import Level using (Level)
-open import Relation.Binary.PropositionalEquality using (_≡_)
 
 private
   variable
