@@ -1,20 +1,21 @@
 open import AlgEff
-open import Level using (Level)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Relation.Nullary using (Dec)
 
 module Choreography.Choreo
   (Loc : Set) (_≟_ : (l l′ : Loc) → Dec (l ≡ l′))
-  {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂)
+  (𝕃 : Sig)
   where
 
-open import Data.Maybe using (Maybe; nothing; just)
+open import Data.Unit using (⊤; tt)
+open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Maybe.Effectful renaming (monad to maybe-monad)
 open import Data.Product using (_,_)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
-open import Level using (_⊔_; suc; Setω)
-open import Relation.Binary.PropositionalEquality using (refl)
+open import Level using (Level)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
 open import Relation.Nullary using (yes; no)
 
 import Choreography.Process
@@ -30,99 +31,88 @@ infix 20 _⇨_◇_
 
 private
   variable
-    ℓ ℓ′  : Level
     A B   : Set
+    ℓ     : Level
     l s r : Loc
+    F     : Loc → Set
+    n     : Network F
 
 ----------------------------------------------------------------------
--- An general interface for _＠_
+-- Located values
 
-At : Setω
-At = ∀ {ℓ} → Set ℓ → Loc → Set ℓ
-
--- the stdlib's ⊤ is not universe-polymorphic
-
-record ⊤ {ℓ : Level} : Set ℓ where
-  constructor tt
-
-opaque
-  local : Loc → At
-  local l A s with l ≟ s
-  ... | yes _ = A
-  ... | no  _ = ⊤
-
-  id-monad : RawMonad {ℓ} (λ A → A)
-  id-monad = mkRawMonad _ (λ x → x) (λ x f → f x)
-
-  top-monad : RawMonad {ℓ} {ℓ′} (λ A → ⊤)
-  top-monad = mkRawMonad _ (λ _ → tt) (λ _ _ → tt)
-
-  instance
-    local-monad : ∀ {l s} → RawMonad {ℓ} (λ A → local l A s)
-    local-monad {l = l} {s = s} with l ≟ s
-    ... | yes _ = id-monad
-    ... | no  _ = top-monad
-
-opaque
-  global : At
-  global A s = A
+_＠_ : Set ℓ → Loc → Set ℓ
+A ＠ l = Maybe A
 
 instance
-  postulate
-    global-monad : ∀ {l} → RawMonad {ℓ} {ℓ} (λ A → global A l)
+  ＠-monad : RawMonad {ℓ} (_＠ l)
+  ＠-monad = maybe-monad
 
 ----------------------------------------------------------------------
--- Choreography
+-- Choreographies
 
-module _ (_＠_ : At) where
+data Op : Set₁ where
+  `comm : (s r : Loc) → (Term 𝕃 A) ＠ s → Op
 
-  data Op : Set (suc (ℓ₁ ⊔ ℓ₂)) where
-    `comm : (s r : Loc) → (Term 𝕃 A) ＠ s → Op
+Arity : Op → Set _
+Arity (`comm {A} _ r _) = A ＠ r
 
-  Arity : Op → Set _
-  Arity (`comm {A} _ r _) = A ＠ r
-
-  ℂ : Sig _ _
-  ℂ = Op ◁ Arity
+ℂ : Sig
+ℂ = Op ◁ Arity
 
 ----------------------------------------------------------------------
 -- Help functions
 
-private
-  variable
-    _＠_ : At
+ℂhoreo : Set → Set _
+ℂhoreo A = Term ℂ A
 
 -- Local computations
 -- use `\Tw` to type `▷`
 
-_▷_ :  (s : Loc) → (Term 𝕃 A) ＠ s → Term (ℂ _＠_) (A ＠ s)
+_▷_ :  (s : Loc) → (Term 𝕃 A) ＠ s → Term ℂ (A ＠ s)
 s ▷ t = perform (`comm s s t)
-
 
 -- Communication
 -- use `\r` to type `⇨`
 -- use `\di` to type `◇`
 
-_⇨_◇_ :  (s r : Loc) → (Term 𝕃 A) ＠ s → Term (ℂ _＠_) (A ＠ r)
+_⇨_◇_ :  (s r : Loc) → (Term 𝕃 A) ＠ s → Term ℂ (A ＠ r)
 s ⇨ r ◇ t = perform (`comm s r t)
 
-ℂhoreo : (At → Set) → Setω
-ℂhoreo F =
-  ∀ (_＠_ : At) ⦃ ＠-monad : ∀ {ℓ} {l} → RawMonad {ℓ} (_＠ l) ⦄ →
-  Term (ℂ _＠_) (F _＠_)
+----------------------------------------------------------------------
+--
+
+data _~_ {A} : ℂhoreo A → Network (\_ → A) → Set₁ where
+
+  done : ∀ {x} →
+         var x ~ (\_ → var x)
+
+  step-▷-just : ∀ {k : Maybe B → Term ℂ A} {k′} {t} →
+                n l ≡ op (`locally t , k′) →
+                k (just (𝕃-handler t)) ~ update l (k′ (𝕃-handler t)) n →
+                op (`comm l l (just t) , k) ~ n
+
+  step-▷-nothing : ∀ {k : Maybe B → Term ℂ A} →
+                   k nothing ~ n →
+                   op (`comm l l nothing , k) ~ n
+
+  step-⇨-just : ∀ {k : Maybe B → Term ℂ A} {k′} {k″ : B → Term ℙ A} {t} →
+                s ≢ r →
+                n s ≡ op (`send r t , k′) →
+                n r ≡ op (`recv s , k″) →
+                k (just (𝕃-handler t)) ~ update s (k′ tt) (update r (k″ (𝕃-handler t)) n) →
+                op (`comm s r (just t) , k) ~ n
+
+  step-⇨-nothing : ∀ {k : Maybe B → Term ℂ A} →
+                   s ≢ r →
+                   k nothing ~ n →
+                   op (`comm s r nothing , k) ~ n
+
+foo : ∀ {c : ℂhoreo A} → c ~ n → n ✓
+foo done = end λ _ → _ , refl
+foo (step-▷-just {l = l} x t) = step (local⇒ⁿ l x) (foo t)
+foo (step-▷-nothing t) = foo t
+foo (step-⇨-just x y z t) = step (comm⇒ⁿ _ _ _ y z) (foo t)
+foo (step-⇨-nothing x t) = foo t
 
 ----------------------------------------------------------------------
 -- Endpoint projection
-
-opaque
-  unfolding local
-
-  epp : ∀ {F} → ℂhoreo F → (l : Loc) → ℙrocess (F (local l))
-  epp c l = interp alg return (c _)
-    where
-      alg : ℂ (local l) -Alg[ Term ℙ A ]
-      alg (`comm s r a , k) with l ≟ s | l ≟ r
-      ... | yes _ | yes _ = locally a >>= k
-      ... | yes _ | no  _ = locally a >>= (λ x → send r x) >> k tt
-      ... | no  _ | yes _ = recv s >>= k
-      ... | no  _ | no  _ = k tt

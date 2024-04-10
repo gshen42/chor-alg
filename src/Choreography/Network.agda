@@ -1,11 +1,10 @@
 open import AlgEff
-open import Level using (Level; suc; _⊔_)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Relation.Nullary using (Dec)
 
 module Choreography.Network
   (Loc : Set) (_≟_ : (l l′ : Loc) → Dec (l ≡ l′))
-  {ℓ₁ ℓ₂ : Level} (𝕃 : Sig ℓ₁ ℓ₂)
+  (𝕃 : Sig)
   where
 
 open import Data.Empty using (⊥-elim)
@@ -62,18 +61,18 @@ opaque
 postulate
   𝕃-handler : ∀ {A : Set} → Term 𝕃 A → A
 
-data _⇒ⁿ_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+data _⇒ⁿ_ {F} : Network F → Network F → Set₁ where
 
   local⇒ⁿ : ∀ l {k} {t : Term 𝕃 A} →
             n l ≡ op (`locally t , k) →
             n ⇒ⁿ (update l (k (𝕃-handler t)) n)
 
-  comm⇒ⁿ : ∀ s r a {k} {k′} →
-           n s ≡ op (`send {A} r a , k) →
+  comm⇒ⁿ : ∀ s r t {k} {k′} →
+           n s ≡ op (`send {A} r t , k) →
            n r ≡ op (`recv {A} s , k′) →
-           n ⇒ⁿ (update s (k tt) (update r (k′ a) n))
+           n ⇒ⁿ (update s (k tt) (update r (k′ (𝕃-handler t)) n))
 
-data _⇒⋆_ {F} : Network F → Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+data _⇒⋆_ {F} : Network F → Network F → Set₁ where
 
   refl : n ⇒⋆ n
 
@@ -98,7 +97,7 @@ postulate
 
 -- Deadlock freedom
 
-data _✓ {F} : Network F → Set (suc (ℓ₁ ⊔ ℓ₂)) where
+data _✓ {F} : Network F → Set₁ where
 
   end : (∀ l → ∃[ x ] n l ≡ var x) → n ✓
 

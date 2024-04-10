@@ -1,24 +1,21 @@
 open import AlgEff
-open import Level using (Level)
 
 module Choreography.Process
-  (Loc : Set)
-  {ℓ₁ ℓ₂ : Level} (𝕃 : Sig  ℓ₁ ℓ₂)
+  (Loc : Set) (𝕃 : Sig)
   where
 
 open import Data.Unit using (⊤)
-open import Level using (_⊔_; suc)
 
 private
   variable
     A : Set
 
 ----------------------------------------------------------------------
--- Signature
+-- Processes
 
-data Op : Set (suc (ℓ₁ ⊔ ℓ₂)) where
+data Op : Set₁ where
   `locally : Term 𝕃 A → Op
-  `send    : Loc → A → Op
+  `send    : Loc → Term 𝕃 A → Op
   `recv    : {A : Set} → Loc → Op
 
 Arity : Op → Set
@@ -26,11 +23,11 @@ Arity (`locally {A} _) = A
 Arity (`send _ _)      = ⊤
 Arity (`recv {A} _)    = A
 
-ℙ : Sig _ _
+ℙ : Sig
 ℙ = Op ◁ Arity
 
 ----------------------------------------------------------------------
--- Shorthands
+-- Helper functions
 
 ℙrocess : Set → Set _
 ℙrocess A = Term ℙ A
@@ -38,7 +35,7 @@ Arity (`recv {A} _)    = A
 locally : Term 𝕃 A → ℙrocess A
 locally t = perform (`locally t)
 
-send : Loc → A → ℙrocess ⊤
+send : Loc → Term 𝕃 A → ℙrocess ⊤
 send l a = perform (`send l a)
 
 recv : Loc → ℙrocess A
