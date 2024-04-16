@@ -7,6 +7,7 @@ module Choreography.Choreo
   (𝕃 : Sig)
   where
 
+open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Maybe.Effectful renaming (monad to maybe-monad)
@@ -14,7 +15,7 @@ open import Data.Product using (_,_)
 open import Effect.Monad using (RawMonad)
 open import Function using (_∘_)
 open import Level using (Level)
-open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; subst; trans)
 open import Relation.Nullary using (yes; no)
 
 import Choreography.Process
@@ -91,29 +92,51 @@ data _~_ {A} : ℂhoreo A → Network A → Set₁ where
 
   done : var a ~ (\_ → var a)
 
-  step-▷-just : n l ≡ op (`locally t , k′) →
-                k (just (𝕃-handler t)) ~ update l (k′ (𝕃-handler t)) n →
-                op (`comm l l (just t) , k) ~ n
+  step-▷ : n l ≡ op (`locally t , k′) →
+           k (just (𝕃-handler t)) ~ update l (k′ (𝕃-handler t)) n →
+           op (`comm l l (just t) , k) ~ n
 
-  step-▷-nothing : k nothing ~ n →
-                   op (`comm l l nothing , k) ~ n
+  step-⇨ : s ≢ r →
+           n s ≡ op (`send r t , k′) →
+           n r ≡ op (`recv s , k″) →
+           k (just (𝕃-handler t)) ~ update s (k′ tt) (update r (k″ (𝕃-handler t)) n) →
+           op (`comm s r (just t) , k) ~ n
 
-  step-⇨-just : s ≢ r →
-                n s ≡ op (`send r t , k′) →
-                n r ≡ op (`recv s , k″) →
-                k (just (𝕃-handler t)) ~ update s (k′ tt) (update r (k″ (𝕃-handler t)) n) →
-                op (`comm s r (just t) , k) ~ n
-
-  step-⇨-nothing : s ≢ r →
-                   k nothing ~ n →
-                   op (`comm s r nothing , k) ~ n
+  step-nothing : k nothing ~ n →
+                 op (`comm s r nothing , k) ~ n
 
 foo : c ~ n → n ✓
 foo done = ✓-done λ _ → _ , refl
-foo (step-▷-just {l = l} x t) = ✓-step (local⇒ⁿ x) (foo t)
-foo (step-▷-nothing t) = foo t
-foo (step-⇨-just x y z t) = ✓-step (comm⇒ⁿ y z) (foo t)
-foo (step-⇨-nothing x t) = foo t
+foo (step-▷ {l = l} x t) = ✓-step (local⇒ⁿ x) (foo t)
+foo (step-⇨ x y z t) = ✓-step (comm⇒ⁿ y z) (foo t)
+foo (step-nothing t) = foo t
 
 ----------------------------------------------------------------------
 -- Endpoint projection
+
+alg : Loc → ℂ -Alg[ ℙrocess A ]
+alg l (`comm s r nothing  , k) = k nothing
+alg l (`comm s r (just t) , k) with s ≟ r | l ≟ s | l ≟ r
+... | yes refl | yes _    | _        = locally t >>= k ∘ just
+... | yes refl | no _     | _        = k nothing
+... | no s≢r   | yes refl | yes refl = ⊥-elim (s≢r refl)
+... | no s≢r   | yes _    | no  _    = send r t >> k nothing
+... | no s≢r   | no  _    | yes _    = recv s >>= k
+... | no s≢r   | no  _    | no  _    = k nothing
+
+epp : ℂhoreo A → Loc → ℙrocess A
+epp c l = interp (alg l) var c
+
+postulate
+  lemma : ∀ {l} {o : Op} {k⋆ : Arity o → ℂhoreo A} {a⋆ : Arity o} →
+          epp (k⋆ a⋆) ≡ update l (epp (k⋆ a⋆) l) (epp (op (o , k⋆)))
+
+  lemma₁ : ∀ {k : Maybe A → ℙrocess B} →
+           alg l (`comm l l (just t) , k) ≡ (locally t >>= k ∘ just)
+
+bar : ∀ (c : ℂhoreo A) → c ~ epp c
+bar (var x) = done
+bar (op (`comm s r nothing  , k)) = step-nothing (bar (k nothing))
+bar (op (`comm s r (just t) , k)) with s ≟ r
+... | yes refl = step-▷ {!!} {!!}
+... | no  s≢r  = step-⇨ s≢r {!!} {!!} {!!}
