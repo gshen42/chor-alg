@@ -67,13 +67,12 @@ postulate
 
 data _⇒ⁿ_ {A} : Network A → Network A → Set₁ where
 
-  local⇒ⁿ :
-    update l (op (`locally t , k)) n ⇒ⁿ
-    update l (k (𝕃-handler t)) n
+  local⇒ⁿ : n l ≡ op (`locally t , k) →
+            n ⇒ⁿ update l (k (𝕃-handler t)) n
 
-  comm⇒ⁿ :
-    update s (op (`send r t , k)) (update r (op (`recv s , k′)) n) ⇒ⁿ
-    update s (k tt) (update r (k′ (𝕃-handler t)) n)
+  comm⇒ⁿ : n s ≡ op (`send r t , k) →
+           n r ≡ op (`recv s , k′) →
+           n ⇒ⁿ update s (k tt) (update r (k′ (𝕃-handler t)) n)
 
 data _⇒⋆_ {A} : Network A → Network A → Set₁ where
 

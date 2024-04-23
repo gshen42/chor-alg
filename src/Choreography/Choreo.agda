@@ -94,13 +94,16 @@ data _~_ {A} : ℂhoreo A → Network A → Set₁ where
 
   step-▷ :
     s ≡ r →
+    n s ≡ op (`locally t , k′) →
     k (just (𝕃-handler t)) ~ update s (k′ (𝕃-handler t)) n →
-    op (`comm s r (just t) , k) ~ update s (op (`locally t , k′)) n
+    op (`comm s r (just t) , k) ~ n
 
   step-⇨ :
     s ≢ r →
+    n s ≡ op (`send r t , k′) →
+    n r ≡ op (`recv s , k″) →
     k (just (𝕃-handler t)) ~ update s (k′ tt) (update r (k″ (𝕃-handler t)) n) →
-    op (`comm s r (just t) , k) ~ update s (op (`send r t , k′)) (update r (op (`recv s , k″)) n)
+    op (`comm s r (just t) , k) ~ n
 
   step-nothing :
     k nothing ~ n →
@@ -109,41 +112,43 @@ data _~_ {A} : ℂhoreo A → Network A → Set₁ where
 subst~ : n′ ≡ n → c ~ n → c ~ n′
 subst~ refl x = x
 
-foo : c ~ n → n ✓
-foo done             = ✓-done λ _ → _ , refl
-foo (step-▷ _ x)     = ✓-step local⇒ⁿ (foo x)
-foo (step-⇨ _ x)     = ✓-step comm⇒ⁿ (foo x)
-foo (step-nothing x) = foo x
+~implies✓ : c ~ n → n ✓
+~implies✓ done             = ✓-done λ _ → _ , refl
+~implies✓ (step-▷ _ x y)   = ✓-step (local⇒ⁿ x) (~implies✓ y)
+~implies✓ (step-⇨ _ x y z) = ✓-step (comm⇒ⁿ x y) (~implies✓ z)
+~implies✓ (step-nothing x) = ~implies✓ x
 
 ----------------------------------------------------------------------
 -- Endpoint projection
 
 alg : Loc → ℂ -Alg[ ℙrocess A ]
 alg l (`comm s r nothing  , k) = k nothing
-alg l (`comm s r (just t) , k) = case (s ≟ r , l ≟ s , l ≟ r) of λ
-  { (yes _ , yes _ , _    ) → locally t >>= k ∘ just
-  ; (yes _ , no _  , _    ) → k nothing
-  ; (no x  , yes y , yes z) → ⊥-elim (x (trans (sym y) z))
-  ; (no _  , yes _ , no _ ) → send r t >> k nothing
-  ; (no _  , no _  , yes _) → recv s >>= k
-  ; (no _  , no _  , no _ ) → k nothing
-  }
+alg l (`comm s r (just t) , k) with l ≟ s | l ≟ r
+... | yes _ | yes _ = locally t >>= k ∘ just
+... | yes _ | no  _ = send r t >> k nothing
+... | no _  | yes _ = recv s >>= k
+... | no _  | no _  = k nothing
 
 epp : ℂhoreo A → Loc → ℙrocess A
 epp c l = interp (alg l) var c
 
 postulate
-  lemma : ∀ {l} {o : Op} {k⋆ : Arity o → ℂhoreo A} {a⋆ : Arity o} →
-          epp (k⋆ a⋆) ≡ update l (epp (k⋆ a⋆) l) (epp (op (o , k⋆)))
+  epp-▷-norm : s ≡ r →
+               epp (op (`comm s r (just t) , k)) s ≡ op (`locally t , \x → epp (k (just x)) s)
 
-  lemma₁ : ∀ {t : Term 𝕃 A} {k : Maybe A → ℂhoreo B} →
-    s ≡ r →
-    epp (op (`comm s r (just t) , k)) ≡ update s (locally t >>= (λ n → n s) ∘ epp ∘ k ∘ just) (epp (k nothing))
+  epp-⇨-norm₁ : s ≢ r →
+                epp (op (`comm s r (just t) , k)) s ≡ op (`send r t , \_ → epp (k nothing) s)
 
-bar : ∀ (c : ℂhoreo A) → c ~ epp c
-bar (var x) = done
-bar (op (`comm s r nothing  , k)) = step-nothing (bar (k nothing))
-bar (op (`comm s r (just t) , k)) = case s ≟ r of λ
-  { (yes s≡r) → subst~ (lemma₁ {k = k} s≡r) (step-▷ s≡r (subst~ {!!} (bar (k (just (𝕃-handler t))))))
-  ; (no  s≢r) → {!!}
-  }
+  epp-⇨-norm₂ : s ≢ r →
+                epp (op (`comm s r (just t) , k)) r ≡ op (`recv s , \x → epp (k (just x)) s)
+
+  lemma₁ : s ≡ r →
+           update s (epp (k (just (𝕃-handler t))) s) (epp (op (`comm s r (just t) , k))) ≡ epp (k (just (𝕃-handler t)))
+
+
+epp~ : ∀ (c : ℂhoreo A) → c ~ epp c
+epp~ (var x) = done
+epp~ (op (`comm s r nothing  , k)) = step-nothing (epp~ (k nothing))
+epp~ (op (`comm s r (just t) , k)) with s ≟ r
+... | yes s≡r = step-▷ s≡r (epp-▷-norm {k = k} s≡r) (subst~ (lemma₁ {k = k} s≡r) (epp~ (k (just (𝕃-handler t)))))
+... | no s≢r  = step-⇨ s≢r (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r) (subst~ {!!} (epp~ (k (just (𝕃-handler t)))))
