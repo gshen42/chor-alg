@@ -125,30 +125,50 @@ alg : Loc → ℂ -Alg[ ℙrocess A ]
 alg l (`comm s r nothing  , k) = k nothing
 alg l (`comm s r (just t) , k) with l ≟ s | l ≟ r
 ... | yes _ | yes _ = locally t >>= k ∘ just
-... | yes _ | no  _ = send r t >> k nothing
-... | no _  | yes _ = recv s >>= k
+... | yes _ | no  _ = send r t >>= \_ →  k nothing
+... | no _  | yes _ = recv s >>= k ∘ just
 ... | no _  | no _  = k nothing
 
 epp : ℂhoreo A → Loc → ℙrocess A
 epp c l = interp (alg l) var c
 
+----------------------------------------------------------------------
+-- Deadlock Freedom of EPP
+
+epp-▷-norm : s ≡ r →
+             epp (op (`comm s r (just t) , k)) s ≡ op (`locally t , \x → epp (k (just x)) s)
+epp-▷-norm {s = s} {r = r} s≡r with s ≟ s | s ≟ r
+... | yes _  | yes _  = refl
+... | yes _  | no s≢r = ⊥-elim (s≢r s≡r)
+... | no s≢s | _      = ⊥-elim (s≢s refl)
+
+epp-⇨-norm₁ : s ≢ r →
+              epp (op (`comm s r (just t) , k)) s ≡ op (`send r t , \_ → epp (k nothing) s)
+epp-⇨-norm₁ {s = s} {r = r} s≢r with s ≟ s | s ≟ r
+... | yes _  | yes s≡r = ⊥-elim (s≢r s≡r)
+... | yes _  | no  _   = refl
+... | no s≢s | _       = ⊥-elim (s≢s refl)
+
+epp-⇨-norm₂ : s ≢ r →
+              epp (op (`comm s r (just t) , k)) r ≡ op (`recv s , \x → epp (k (just x)) r)
+epp-⇨-norm₂ {s = s} {r = r} s≢r with r ≟ s | r ≟ r
+... | yes r≡s | yes _  = ⊥-elim (s≢r (sym r≡s))
+... | no _    | yes _  = refl
+... | _       | no r≢r = ⊥-elim (r≢r refl)
+
 postulate
-  epp-▷-norm : s ≡ r →
-               epp (op (`comm s r (just t) , k)) s ≡ op (`locally t , \x → epp (k (just x)) s)
-
-  epp-⇨-norm₁ : s ≢ r →
-                epp (op (`comm s r (just t) , k)) s ≡ op (`send r t , \_ → epp (k nothing) s)
-
-  epp-⇨-norm₂ : s ≢ r →
-                epp (op (`comm s r (just t) , k)) r ≡ op (`recv s , \x → epp (k (just x)) s)
-
   lemma₁ : s ≡ r →
            update s (epp (k (just (𝕃-handler t))) s) (epp (op (`comm s r (just t) , k))) ≡ epp (k (just (𝕃-handler t)))
 
+  lemma₂ : s ≢ r →
+           update s (epp (k nothing) s) (update r (epp (k (just (𝕃-handler t))) r) (epp (op (`comm s r (just t) , k)))) ≡ epp (k (just (𝕃-handler t)))
 
 epp~ : ∀ (c : ℂhoreo A) → c ~ epp c
 epp~ (var x) = done
 epp~ (op (`comm s r nothing  , k)) = step-nothing (epp~ (k nothing))
 epp~ (op (`comm s r (just t) , k)) with s ≟ r
 ... | yes s≡r = step-▷ s≡r (epp-▷-norm {k = k} s≡r) (subst~ (lemma₁ {k = k} s≡r) (epp~ (k (just (𝕃-handler t)))))
-... | no s≢r  = step-⇨ s≢r (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r) (subst~ {!!} (epp~ (k (just (𝕃-handler t)))))
+... | no s≢r  = step-⇨ s≢r (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r) (subst~ (lemma₂ {k = k} s≢r) (epp~ (k (just (𝕃-handler t)))))
+
+epp✓ : ∀ (c : ℂhoreo A) → (epp c) ✓
+epp✓ = ~implies✓ ∘ epp~
