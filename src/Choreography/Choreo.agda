@@ -13,6 +13,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Maybe.Effectful renaming (monad to maybe-monad)
 open import Data.Product using (_×_; _,_)
 open import Effect.Monad using (RawMonad)
+open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_; case_of_)
 open import Level using (Level)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; subst; trans; sym)
@@ -26,25 +27,31 @@ open module Network = Choreography.Network Loc _≟_ 𝕃
 
 open RawMonad ⦃...⦄
 
+infix 20 ⦉_⦊
 infix 20 _▷_
 infix 20 _⇨_◇_
 
 private
   variable
-    ℓ     : Level
-    A B   : Set
-    a     : A
-    l s r : Loc
+    ℓ       : Level
+    A B     : Set ℓ
+    a       : A
+    l s r u : Loc
 
 ----------------------------------------------------------------------
 -- Located values
 
-_＠_ : Set ℓ → Loc → Set ℓ
-A ＠ l = Maybe A
+data _＠_ (A : Set ℓ) (l : Loc) : Set ℓ where
+  ϵ   : A ＠ l
+  ⦉_⦊ : A → A ＠ l
 
 instance
   ＠-monad : RawMonad {ℓ} (_＠ l)
-  ＠-monad = maybe-monad
+  ＠-monad = mkRawMonad _ ⦉_⦊ ＠-bind
+    where
+    ＠-bind : A ＠ l → (A → B ＠ l) → B ＠ l
+    ＠-bind ϵ     f = ϵ
+    ＠-bind ⦉ x ⦊ f = f x
 
 ----------------------------------------------------------------------
 -- Choreographies
@@ -78,56 +85,15 @@ _⇨_◇_ :  (s r : Loc) → (Term 𝕃 A) ＠ s → Term ℂ (A ＠ r)
 s ⇨ r ◇ t = perform (`comm s r t)
 
 ----------------------------------------------------------------------
---
-
-private
-  variable
-    n n′  : Network A
-    t     : Term 𝕃 A
-    k     : Maybe A → ℂhoreo B
-    k′ k″ : A → ℙrocess B
-    c     : ℂhoreo A
-
-data _~_ {A} : ℂhoreo A → Network A → Set₁ where
-
-  done : var a ~ (\_ → var a)
-
-  step-▷ :
-    s ≡ r →
-    n s ≡ op (`locally t , k′) →
-    k (just (𝕃-handler t)) ~ update s (k′ (𝕃-handler t)) n →
-    op (`comm s r (just t) , k) ~ n
-
-  step-⇨ :
-    s ≢ r →
-    n s ≡ op (`send r t , k′) →
-    n r ≡ op (`recv s , k″) →
-    k (just (𝕃-handler t)) ~ update s (k′ tt) (update r (k″ (𝕃-handler t)) n) →
-    op (`comm s r (just t) , k) ~ n
-
-  step-nothing :
-    k nothing ~ n →
-    op (`comm s r nothing , k) ~ n
-
-subst~ : n′ ≡ n → c ~ n → c ~ n′
-subst~ refl x = x
-
-~implies✓ : c ~ n → n ✓
-~implies✓ done             = ✓-done λ _ → _ , refl
-~implies✓ (step-▷ _ x y)   = ✓-step (local⇒ⁿ x) (~implies✓ y)
-~implies✓ (step-⇨ _ x y z) = ✓-step (comm⇒ⁿ x y) (~implies✓ z)
-~implies✓ (step-nothing x) = ~implies✓ x
-
-----------------------------------------------------------------------
 -- Endpoint projection
 
 alg : Loc → ℂ -Alg[ ℙrocess A ]
-alg l (`comm s r nothing  , k) = k nothing
-alg l (`comm s r (just t) , k) with l ≟ s | l ≟ r
-... | yes _ | yes _ = locally t >>= k ∘ just
-... | yes _ | no  _ = send r t >>= \_ →  k nothing
-... | no _  | yes _ = recv s >>= k ∘ just
-... | no _  | no _  = k nothing
+alg l (`comm s r ϵ  , k) = k ϵ
+alg l (`comm s r ⦉ t ⦊ , k) with l ≟ s | l ≟ r
+... | yes _ | yes _ = locally t >>= k ∘ ⦉_⦊
+... | yes _ | no  _ = send r t >>= \_ →  k ϵ
+... | no _  | yes _ = recv s >>= k ∘ ⦉_⦊
+... | no _  | no _  = k ϵ
 
 epp : ℂhoreo A → Loc → ℙrocess A
 epp c l = interp (alg l) var c
@@ -135,40 +101,67 @@ epp c l = interp (alg l) var c
 ----------------------------------------------------------------------
 -- Deadlock Freedom of EPP
 
+private
+  variable
+    n n′  : Network A
+    t     : Term 𝕃 A
+    k     : A ＠ l → ℂhoreo B
+    k′ k″ : A → ℙrocess B
+    c     : ℂhoreo A
+
+postulate
+  fun-ext : ∀ {ℓ ℓ′} {A : Set ℓ} {B : Set ℓ′} {f g : A → B} →
+            (∀ a → f a ≡ g a) → f ≡ g
+
+  irrelevance : ∀ {k : A ＠ r → ℂhoreo B} {x y : A ＠ r} →
+                l ≢ r → epp (k x) l ≡ epp (k y) l
+
 epp-▷-norm : s ≡ r →
-             epp (op (`comm s r (just t) , k)) s ≡ op (`locally t , \x → epp (k (just x)) s)
+             epp (op (`comm s r ⦉ t ⦊ , k)) s ≡ op (`locally t , \x → epp (k ⦉ x ⦊) s)
 epp-▷-norm {s = s} {r = r} s≡r with s ≟ s | s ≟ r
 ... | yes _  | yes _  = refl
 ... | yes _  | no s≢r = ⊥-elim (s≢r s≡r)
 ... | no s≢s | _      = ⊥-elim (s≢s refl)
 
 epp-⇨-norm₁ : s ≢ r →
-              epp (op (`comm s r (just t) , k)) s ≡ op (`send r t , \_ → epp (k nothing) s)
+              epp (op (`comm s r ⦉ t ⦊ , k)) s ≡ op (`send r t , \_ → epp (k ϵ) s)
 epp-⇨-norm₁ {s = s} {r = r} s≢r with s ≟ s | s ≟ r
 ... | yes _  | yes s≡r = ⊥-elim (s≢r s≡r)
 ... | yes _  | no  _   = refl
 ... | no s≢s | _       = ⊥-elim (s≢s refl)
 
 epp-⇨-norm₂ : s ≢ r →
-              epp (op (`comm s r (just t) , k)) r ≡ op (`recv s , \x → epp (k (just x)) r)
+              epp (op (`comm s r ⦉ t ⦊ , k)) r ≡ op (`recv s , \x → epp (k ⦉ x ⦊) r)
 epp-⇨-norm₂ {s = s} {r = r} s≢r with r ≟ s | r ≟ r
 ... | yes r≡s | yes _  = ⊥-elim (s≢r (sym r≡s))
 ... | no _    | yes _  = refl
 ... | _       | no r≢r = ⊥-elim (r≢r refl)
 
-postulate
-  lemma₁ : s ≡ r →
-           update s (epp (k (just (𝕃-handler t))) s) (epp (op (`comm s r (just t) , k))) ≡ epp (k (just (𝕃-handler t)))
+opaque
+  unfolding update
 
-  lemma₂ : s ≢ r →
-           update s (epp (k nothing) s) (update r (epp (k (just (𝕃-handler t))) r) (epp (op (`comm s r (just t) , k)))) ≡ epp (k (just (𝕃-handler t)))
+  lemma₁ : s ≡ r → ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ⦉ 𝕃-handler t ⦊) s) (epp (op (`comm s r ⦉ t ⦊ , k))) l
+  lemma₁ {s = s} {r = r} {k = k} s≡r l with s ≟ l
+  ... | yes refl = refl
+  ... | no s≢l with l ≟ s | l ≟ r
+  ...          | yes l≡s | _       = ⊥-elim (s≢l (sym l≡s))
+  ...          | no  _   | yes l≡r = ⊥-elim (s≢l (trans s≡r (sym l≡r)))
+  ...          | no l≢s  | no l≢r  = irrelevance {k = k} l≢r
 
-epp~ : ∀ (c : ℂhoreo A) → c ~ epp c
-epp~ (var x) = done
-epp~ (op (`comm s r nothing  , k)) = step-nothing (epp~ (k nothing))
-epp~ (op (`comm s r (just t) , k)) with s ≟ r
-... | yes s≡r = step-▷ s≡r (epp-▷-norm {k = k} s≡r) (subst~ (lemma₁ {k = k} s≡r) (epp~ (k (just (𝕃-handler t)))))
-... | no s≢r  = step-⇨ s≢r (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r) (subst~ (lemma₂ {k = k} s≢r) (epp~ (k (just (𝕃-handler t)))))
+  lemma₂ : s ≢ r → ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ϵ) s) (update r (epp (k ⦉ 𝕃-handler t ⦊) r) (epp (op (`comm s r ⦉ t ⦊ , k)))) l
+  lemma₂ {s = s} {r = r} {k = k} s≢r l with s ≟ l
+  ... | yes refl = irrelevance {k = k} s≢r
+  ... | no  s≢r  with r ≟ l
+  ...            | yes refl = refl
+  ...            | no  r≢l  with l ≟ s | l ≟ r
+  ...                       | yes refl | yes _    = ⊥-elim (s≢r refl)
+  ...                       | yes refl | no  _    = ⊥-elim (s≢r refl)
+  ...                       | no  _    | yes refl = ⊥-elim (r≢l refl)
+  ...                       | no _     | no _     = irrelevance {k = k} \x → ⊥-elim (r≢l (sym x))
 
 epp✓ : ∀ (c : ℂhoreo A) → (epp c) ✓
-epp✓ = ~implies✓ ∘ epp~
+epp✓ (var x) = ✓-done \_ → _ , refl
+epp✓ (op (`comm s r ϵ     , k)) = epp✓ (k ϵ)
+epp✓ (op (`comm s r ⦉ t ⦊ , k)) with s ≟ r
+... | yes s≡r = ✓-step (local⇒ⁿ {l = s} (epp-▷-norm {k = k} s≡r)) (subst (_✓) (fun-ext (lemma₁ {k = k} s≡r)) (epp✓ (k ⦉ 𝕃-handler t ⦊)))
+... | no  s≢r = ✓-step (comm⇒ⁿ {s = s} {r = r} (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r)) (subst (_✓) (fun-ext (lemma₂ {k = k} s≢r)) (epp✓ (k ⦉ 𝕃-handler t ⦊)))
