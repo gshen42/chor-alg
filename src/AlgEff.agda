@@ -5,10 +5,12 @@
 
 module AlgEff where
 
+open import Axiom.Extensionality.Propositional using (Extensionality)
 open import Data.Product using (Σ; Σ-syntax; _,_)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
 open import Function using (_∘_)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong)
 
 private
   variable
@@ -57,13 +59,16 @@ term-alg = op
 
 -- `Term` is a monad (the free monad)
 
+return : A → Term 𝔽 A
+return = var
+
+_>>=_ : Term 𝔽 A → (A → Term 𝔽 B) → Term 𝔽 B
+var x      >>= f = f x
+op (o , k) >>= f = op (o , _>>= f ∘ k)
+
 instance
   term-monad : RawMonad (Term 𝔽)
-  term-monad = mkRawMonad _ var _>>=_
-    where
-      _>>=_ : Term 𝔽 A → (A → Term 𝔽 B) → Term 𝔽 B
-      var x      >>= f = f x
-      op (o , k) >>= f = op (o , _>>= f ∘ k)
+  term-monad = mkRawMonad _ return _>>=_
 
 perform : ∀ (o : Op 𝔽) → Term 𝔽 (Arity 𝔽 o)
 perform o = op (o , var)
@@ -74,3 +79,12 @@ perform o = op (o , var)
 interp : 𝔽 -Alg[ X ] → (A → X) → Term 𝔽 A → X
 interp alg f (var x)      = f x
 interp alg f (op (o , k)) = alg (o , interp alg f ∘ k)
+
+postulate
+  fun-ext : ∀ {ℓ ℓ′} → Extensionality ℓ ℓ′
+
+fusion : ∀ {alg : 𝔽 -Alg[ X ]} {f : A → X} (t : Term 𝔽 A) k →
+         interp alg f (t >>= k) ≡ interp alg (interp alg f ∘ k) t
+fusion {alg = alg} {f = f} t k with t
+... | var x       = refl
+... | op (o , k′) = cong (\x → alg (o , x)) (fun-ext \x → fusion (k′ x) k)
