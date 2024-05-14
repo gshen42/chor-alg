@@ -1,4 +1,4 @@
-open import AlgEff
+open import AlgEff hiding (return; _>>=_)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Relation.Nullary using (Dec)
 
@@ -11,11 +11,11 @@ open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Maybe.Effectful renaming (monad to maybe-monad)
-open import Data.Product using (_×_; _,_)
+open import Data.Product using (_×_; _,_; ∃-syntax)
 open import Effect.Monad using (RawMonad)
 open import Effect.Monad.MyStuff using (mkRawMonad)
-open import Function using (_∘_; case_of_)
-open import Level using (Level)
+open import Function using (_∘_; const)
+open import Level using (Level; suc)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; subst; trans; sym)
 open import Relation.Nullary using (yes; no)
 
@@ -25,33 +25,35 @@ open module Process = Choreography.Process Loc 𝕃 hiding (Op; Arity)
 import Choreography.Network
 open module Network = Choreography.Network Loc _≟_ 𝕃
 
-open RawMonad ⦃...⦄
-
 infix 20 ⦉_⦊
 infix 20 _▷_
 infix 20 _⇨_◇_
 
 private
   variable
-    ℓ       : Level
-    A B     : Set ℓ
-    a       : A
-    l s r u : Loc
+    A B C      : Set
+    a          : A
+    l l′ s r u : Loc
 
 ----------------------------------------------------------------------
 -- Located values
 
-data _＠_ (A : Set ℓ) (l : Loc) : Set ℓ where
+data _＠_ {ℓ : Level} (A : Set ℓ) (l : Loc) : Set ℓ where
   ϵ   : A ＠ l
   ⦉_⦊ : A → A ＠ l
 
 instance
-  ＠-monad : RawMonad {ℓ} (_＠ l)
-  ＠-monad = mkRawMonad _ ⦉_⦊ ＠-bind
+  ＠-monad : RawMonad (_＠ l)
+  ＠-monad = mkRawMonad _ return _>>=_
     where
-    ＠-bind : A ＠ l → (A → B ＠ l) → B ＠ l
-    ＠-bind ϵ     f = ϵ
-    ＠-bind ⦉ x ⦊ f = f x
+    return : A → A ＠ l
+    return = ⦉_⦊
+
+    _>>=_ : A ＠ l → (A → B ＠ l) → B ＠ l
+    ϵ     >>= f = ϵ
+    ⦉ x ⦊ >>= f = f x
+
+open RawMonad ⦃...⦄
 
 ----------------------------------------------------------------------
 -- Choreographies
@@ -95,26 +97,44 @@ alg l (`comm s r ⦉ t ⦊ , k) with l ≟ s | l ≟ r
 ... | no _  | yes _ = recv s >>= k ∘ ⦉_⦊
 ... | no _  | no _  = k ϵ
 
-epp : ℂhoreo A → Loc → ℙrocess A
-epp c l = interp (alg l) var c
+map : Loc → A ＠ l → ℙrocess (A ＠ l)
+map {l = l} l′ with l ≟ l′
+... | yes _ = return
+... | no  _ = const (return ϵ)
 
-----------------------------------------------------------------------
--- Deadlock Freedom of EPP
+epp : ℂhoreo (A ＠ l) → Loc → ℙrocess (A ＠ l)
+epp c l = interp (alg l) (map l) c
 
 private
   variable
     n n′  : Network A
     t     : Term 𝕃 A
-    k     : A ＠ l → ℂhoreo B
+    t′    : Term 𝕃 A ＠ l
+    k     : A ＠ l → ℂhoreo (B ＠ l′)
     k′ k″ : A → ℙrocess B
-    c     : ℂhoreo A
+    c     : ℂhoreo (A ＠ l)
 
-postulate
-  fun-ext : ∀ {ℓ ℓ′} {A : Set ℓ} {B : Set ℓ′} {f g : A → B} →
-            (∀ a → f a ≡ g a) → f ≡ g
+----------------------------------------------------------------------
+-- Wellformed continuations and choreographies
 
-  irrelevance : ∀ {k : A ＠ r → ℂhoreo B} {x y : A ＠ r} →
-                l ≢ r → epp (k x) l ≡ epp (k y) l
+wellformed : (A ＠ s → ℂhoreo (B ＠ r)) → Set _
+wellformed {s = s} k = ∀ x y l → l ≢ s → epp (k x) l ≡ epp (k y) l
+
+data Wf : ℂhoreo (A ＠ l ) → Set₁ where
+
+  wf-var : Wf (var a)
+
+  wf-comm : wellformed k →
+            (∀ x → Wf (k x)) →
+            Wf (op (`comm s r t′ , k))
+
+----------------------------------------------------------------------
+-- Deadlock Freedom of EPP
+
+epp-var-norm : ∀ {a : A ＠ l} → ∃[ x ] epp (var a) l′ ≡ var x
+epp-var-norm {l = l} {l′ = l′} with l ≟ l′
+... | yes _ = _ , refl
+... | no  _ = _ , refl
 
 epp-▷-norm : s ≡ r →
              epp (op (`comm s r ⦉ t ⦊ , k)) s ≡ op (`locally t , \x → epp (k ⦉ x ⦊) s)
@@ -140,28 +160,30 @@ epp-⇨-norm₂ {s = s} {r = r} s≢r with r ≟ s | r ≟ r
 opaque
   unfolding update
 
-  lemma₁ : s ≡ r → ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ⦉ 𝕃-handler t ⦊) s) (epp (op (`comm s r ⦉ t ⦊ , k))) l
-  lemma₁ {s = s} {r = r} {k = k} s≡r l with s ≟ l
+  lemma₁ : s ≡ r → wellformed k →
+           ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ⦉ 𝕃-handler t ⦊) s) (epp (op (`comm s r ⦉ t ⦊ , k))) l
+  lemma₁ {s = s} {r = r} {k = k} s≡r wfk l with s ≟ l
   ... | yes refl = refl
   ... | no s≢l with l ≟ s | l ≟ r
   ...          | yes l≡s | _       = ⊥-elim (s≢l (sym l≡s))
   ...          | no  _   | yes l≡r = ⊥-elim (s≢l (trans s≡r (sym l≡r)))
-  ...          | no l≢s  | no l≢r  = irrelevance {k = k} l≢r
+  ...          | no l≢s  | no l≢r  = wfk _ _ l l≢r
 
-  lemma₂ : s ≢ r → ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ϵ) s) (update r (epp (k ⦉ 𝕃-handler t ⦊) r) (epp (op (`comm s r ⦉ t ⦊ , k)))) l
-  lemma₂ {s = s} {r = r} {k = k} s≢r l with s ≟ l
-  ... | yes refl = irrelevance {k = k} s≢r
+  lemma₂ : s ≢ r → wellformed k →
+           ∀ l → epp (k ⦉ 𝕃-handler t ⦊) l ≡ update s (epp (k ϵ) s) (update r (epp (k ⦉ 𝕃-handler t ⦊) r) (epp (op (`comm s r ⦉ t ⦊ , k)))) l
+  lemma₂ {s = s} {r = r} {k = k} s≢r wfk l with s ≟ l
+  ... | yes refl = wfk _ _ l s≢r
   ... | no  s≢r  with r ≟ l
   ...            | yes refl = refl
   ...            | no  r≢l  with l ≟ s | l ≟ r
   ...                       | yes refl | yes _    = ⊥-elim (s≢r refl)
   ...                       | yes refl | no  _    = ⊥-elim (s≢r refl)
   ...                       | no  _    | yes refl = ⊥-elim (r≢l refl)
-  ...                       | no _     | no _     = irrelevance {k = k} \x → ⊥-elim (r≢l (sym x))
+  ...                       | no _     | no _     = wfk _ _ l \x → ⊥-elim (r≢l (sym x))
 
-epp✓ : ∀ (c : ℂhoreo A) → (epp c) ✓
-epp✓ (var x) = ✓-done \_ → _ , refl
-epp✓ (op (`comm s r ϵ     , k)) = epp✓ (k ϵ)
-epp✓ (op (`comm s r ⦉ t ⦊ , k)) with s ≟ r
-... | yes s≡r = ✓-step (local⇒ⁿ {l = s} (epp-▷-norm {k = k} s≡r)) (subst (_✓) (fun-ext (lemma₁ {k = k} s≡r)) (epp✓ (k ⦉ 𝕃-handler t ⦊)))
-... | no  s≢r = ✓-step (comm⇒ⁿ {s = s} {r = r} (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r)) (subst (_✓) (fun-ext (lemma₂ {k = k} s≢r)) (epp✓ (k ⦉ 𝕃-handler t ⦊)))
+epp✓ : Wf c → (epp c) ✓
+epp✓ wf-var = ✓-done \_ → epp-var-norm
+epp✓ {c = op (`comm s r ϵ     , k)} (wf-comm wfk Wfk) = epp✓ (Wfk ϵ)
+epp✓ {c = op (`comm s r ⦉ t ⦊ , k)} (wf-comm wfk Wfk) with s ≟ r
+... | yes s≡r = ✓-step (local⇒ⁿ {l = s} (epp-▷-norm {k = k} s≡r)) (subst (_✓) (fun-ext (lemma₁ {k = k} s≡r wfk)) (epp✓ (Wfk ⦉ 𝕃-handler t ⦊)))
+... | no  s≢r = ✓-step (comm⇒ⁿ {s = s} {r = r} (epp-⇨-norm₁ {k = k} s≢r) (epp-⇨-norm₂ {k = k} s≢r)) (subst (_✓) (fun-ext (lemma₂ {k = k} s≢r wfk)) (epp✓ (Wfk ⦉ 𝕃-handler t ⦊)))
