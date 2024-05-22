@@ -120,13 +120,33 @@ private
 wellformed : (A ＠ s → ℂhoreo (B ＠ r)) → Set _
 wellformed {s = s} k = ∀ x y l → l ≢ s → epp (k x) l ≡ epp (k y) l
 
-data Wf : ℂhoreo (A ＠ l ) → Set₁ where
+data Wf : ℂhoreo (A ＠ l) → Set₁ where
 
   wf-var : Wf (var a)
 
   wf-comm : wellformed k →
             (∀ x → Wf (k x)) →
             Wf (op (`comm s r t′ , k))
+
+Wf⇒wf : (∀ x → Wf (k x)) → wellformed k
+Wf⇒wf Wfk = {!!}
+
+var-wf : wellformed {A = A} {s = s} var
+var-wf {s = s} x y l l≢s with s ≟ l
+... | yes s≡l = ⊥-elim (l≢s (sym s≡l))
+... | no  _   = refl
+
+▷-wf : Wf (l ▷ t′)
+▷-wf = wf-comm var-wf (\_ → wf-var)
+
+⇨-wf : Wf (s ⇨ r ◇ t′)
+⇨-wf = wf-comm var-wf \_ → wf-var
+
+>>=-wf : ∀ {c : ℂhoreo (A ＠ l)} {k : A ＠ l → ℂhoreo (B ＠ l′)} →
+         Wf c → (∀ x → Wf (k x)) →
+         Wf (c >>= k)
+>>=-wf {c = var x} wf-var Wfk = Wfk _
+>>=-wf {c = op (`comm s r x , k′)} (wf-comm wfk′ Wfk′) Wfk = wf-comm {!!} {!!}
 
 ----------------------------------------------------------------------
 -- Deadlock Freedom of EPP
