@@ -1,0 +1,7 @@
+; prevent Dune from treating all warnings as fatal errors
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
+
+(executable
+  (name choreo))
