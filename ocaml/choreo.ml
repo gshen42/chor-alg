@@ -10,7 +10,9 @@ type loc = string
 
 (* Located Values *)
 
-type 'a located = Present of 'a | Absent
+type 'a located =
+  | Present of 'a
+  | Absent
 
 exception Unwrap_absent
 
@@ -39,7 +41,11 @@ let recv src =
 
 type _ Effect.t +=
     Comm : string * string * ('a Lazy.t) -> ('a located) Effect.t
+  | Announce : string * string list * ('a Lazy.t) -> ('a located) Effect.t
   | Enclave : loc list * (unit -> 'a) -> ('a located) Effect.t
+
+let locally l msg = perform (Comm (l, l, msg))
+let comm s r msg = perform (Comm (s, r, msg))
 
 (* Endpoint projection as effect handlers *)
 
@@ -50,12 +56,22 @@ let rec epp : type t. (unit -> t) -> loc -> t = fun c l ->
     effc = fun (type a) (eff : a Effect.t) ->
       match eff with
       | Comm (src, dst, msg) -> Some (fun (k : (a, _) continuation) ->
-          if src = l && dst = l
-            then continue k (Present (Lazy.force msg))
-          else if src = l then
+          if src = l && dst = l then (* l performs a local computation *)
+            let x = (Lazy.force msg) in
+            continue k (Present x)
+          else if src = l then (* l is the sender *)
             let _ = send (Lazy.force msg) dst in
             continue k Absent
-          else if dst = l then
+          else if dst = l then (* l is receiver *)
+            let x = recv src in
+            continue k (Present x)
+          else (* l is not involved *)
+            continue k Absent)
+      | Announce (src, dsts, msg) -> Some (fun (k : (a, _) continuation) ->
+          if src == l then
+            let _ = List.iter (send (Lazy.force msg)) dsts in
+            continue k Absent
+          else if List.mem l dsts then
             let x = recv src in
             continue k (Present x)
           else
@@ -83,4 +99,9 @@ let bar () =
     else
       perform (Comm (bob, bob, lazy (printf "world"))))))
 
-let _ = epp bar Sys.argv.(1)
+let double2 () =
+  let x = comm alice bob (lazy (read_int ())) in
+  let y = comm bob alice (lazy (un x * 2)) in
+  locally alice (lazy (printf "%d\n" (un y)))
+
+let _ = epp double2 alice
